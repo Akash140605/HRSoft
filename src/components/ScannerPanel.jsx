@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, ScanLine, SearchCheck, CalendarDays, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Loader2, Factory, Users, Activity } from 'lucide-react';
+import { Camera, ScanLine, SearchCheck, CalendarDays, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Loader2, Factory, Users, Activity, Keyboard, ScanBarcode } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { useHR } from '../context/HRContext';
 
@@ -10,17 +10,18 @@ const toneMap = {
   info: 'border-slate-200 bg-slate-50 text-slate-700'
 };
 
-const statusMeta = {
-  full: { label: 'Full', cls: 'bg-rose-100 text-rose-700 border-rose-200', icon: XCircle },
-  filling: { label: 'Filling', cls: 'bg-amber-100 text-amber-700 border-amber-200', icon: AlertTriangle },
-  ok: { label: 'Open', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: CheckCircle2 }
-};
-
 function ScanBadge({ status, text }) {
-  const icon = status === 'success' ? <CheckCircle2 className="h-4 w-4" /> : status === 'error' ? <XCircle className="h-4 w-4" /> : status === 'warn' ? <AlertTriangle className="h-4 w-4" /> : null;
+  const icon =
+    status === 'success' ? <CheckCircle2 className="h-4 w-4" /> :
+    status === 'error' ? <XCircle className="h-4 w-4" /> :
+    status === 'warn' ? <AlertTriangle className="h-4 w-4" /> : null;
+
   return (
     <div className={`rounded-none border px-4 py-3 text-sm ${toneMap[status] || toneMap.info}`}>
-      <div className="flex items-center gap-2 font-semibold capitalize">{icon}{status || 'info'}</div>
+      <div className="flex items-center gap-2 font-semibold capitalize">
+        {icon}
+        {status || 'info'}
+      </div>
       <div className="mt-1">{text || 'System is ready.'}</div>
     </div>
   );
@@ -33,7 +34,13 @@ function HallStatusCard({ hall }) {
   const safeCapacity = Number.isFinite(capacity) && capacity > 0 ? capacity : 0;
   const occupancy = safeCapacity > 0 ? Math.round((safeCount / safeCapacity) * 100) : 0;
   const status = safeCapacity === 0 ? 'ok' : occupancy >= 100 ? 'full' : occupancy >= 75 ? 'filling' : 'ok';
-  const meta = statusMeta[status] || statusMeta.ok;
+
+  const meta = {
+    full: { label: 'Full', cls: 'bg-rose-100 text-rose-700 border-rose-200', icon: XCircle },
+    filling: { label: 'Filling', cls: 'bg-amber-100 text-amber-700 border-amber-200', icon: AlertTriangle },
+    ok: { label: 'Open', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: CheckCircle2 }
+  }[status];
+
   const Icon = meta.icon;
 
   return (
@@ -76,6 +83,7 @@ function HallStatusCard({ hall }) {
 export default function ScannerPanel() {
   const { state, setSelectedDate, processEntry, checkEligibility, overrideEntry, lastMessage, totals, canOverride } = useHR();
 
+  const [mode, setMode] = useState('scan');
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState(null);
   const [cameraMode, setCameraMode] = useState(false);
@@ -83,6 +91,8 @@ export default function ScannerPanel() {
   const [feedback, setFeedback] = useState({ status: 'info', text: 'System is ready.' });
   const [processing, setProcessing] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
+  const [hallData, setHallData] = useState([]);
+  const [scannedCodes, setScannedCodes] = useState([]);
 
   const scannerRef = useRef(null);
   const isSubmittingRef = useRef(false);
@@ -91,9 +101,13 @@ export default function ScannerPanel() {
   const resumeTimerRef = useRef(null);
 
   const canScan = useMemo(() => !totals.locked, [totals.locked]);
-  const halls = Array.isArray(state?.halls) ? state.halls : [];
-  const fullHalls = halls.filter((h) => h?.status === 'full');
-  const fillingHalls = halls.filter((h) => h?.status === 'filling');
+
+  useEffect(() => {
+    setHallData(Array.isArray(state?.halls) ? [...state.halls] : []);
+  }, [state?.halls]);
+
+  const fullHalls = hallData.filter((h) => h?.status === 'full');
+  const fillingHalls = hallData.filter((h) => h?.status === 'filling');
   const activeHalls = [...fullHalls, ...fillingHalls];
 
   const beep = (type = 'success') => {
@@ -129,6 +143,36 @@ export default function ScannerPanel() {
     }
   };
 
+  const bumpHallLive = (codeValue) => {
+    const c = String(codeValue).trim();
+    setHallData((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+
+      let changed = false;
+      const next = prev.map((hall) => {
+        const hallCode = String(hall?.code ?? hall?.hallCode ?? hall?.id ?? '').trim();
+        if (!hallCode || hallCode !== c) return hall;
+
+        const currentCount = Number(hall?.count ?? 0);
+        const currentCapacity = Number(hall?.capacity ?? 0);
+        const safeCount = Number.isFinite(currentCount) && currentCount >= 0 ? currentCount : 0;
+        const safeCapacity = Number.isFinite(currentCapacity) && currentCapacity > 0 ? currentCapacity : 0;
+
+        const newCount = safeCapacity > 0 ? Math.min(safeCount + 1, safeCapacity) : safeCount + 1;
+        const occupancy = safeCapacity > 0 ? Math.round((newCount / safeCapacity) * 100) : 0;
+        const newStatus = safeCapacity === 0 ? 'ok' : occupancy >= 100 ? 'full' : occupancy >= 75 ? 'filling' : 'ok';
+
+        changed = true;
+        return { ...hall, count: newCount, status: newStatus };
+      });
+
+      return changed ? next : prev;
+    });
+  };
+
+  const isAlreadyScanned = (value) => scannedCodes.includes(String(value).trim());
+  const markScanned = (value) => setScannedCodes((prev) => prev.includes(String(value).trim()) ? prev : [...prev, String(value).trim()]);
+
   const handlePreview = () => {
     const value = code.trim();
     if (!value) return;
@@ -139,16 +183,28 @@ export default function ScannerPanel() {
   const handleSubmit = async (value = code, source = 'manual') => {
     const trimmed = String(value).trim();
     if (!trimmed || isSubmittingRef.current) return;
+
+    if (mode === 'scan' && isAlreadyScanned(trimmed)) {
+      showFeedback('warn', 'Already scanned.');
+      beep('error');
+      setCode('');
+      return;
+    }
+
     isSubmittingRef.current = true;
     setProcessing(true);
     setScanSuccess(false);
+
     try {
       const result = processEntry(trimmed);
       setPreview(null);
       setCode('');
+
       if (result?.ok) {
         beep('success');
         setScanSuccess(true);
+        markScanned(trimmed);
+        bumpHallLive(trimmed);
         showFeedback('success', source === 'camera' ? 'Verified. Scan saved successfully.' : 'Verified. Entry saved successfully.');
         if (source === 'camera') await stopCamera();
       } else {
@@ -197,37 +253,54 @@ export default function ScannerPanel() {
     if (!code) return;
     const trimmed = code.trim();
     if (!trimmed) return;
-    handleSubmit(trimmed, 'manual');
+    if (mode === 'scan') handleSubmit(trimmed, 'manual');
   }, [code]);
 
   useEffect(() => {
     let mounted = true;
+
     const startCamera = async () => {
-      if (!cameraMode || !canScan) return;
+      if (!cameraMode || !canScan || mode !== 'scan') return;
       setCameraError('');
+
       try {
         const scanner = new Html5Qrcode('hr-camera-reader');
         scannerRef.current = scanner;
+
         await scanner.start(
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 260, height: 130 }, continuous: true },
           async (decodedText) => {
             const scanned = String(decodedText).trim();
             if (!scanned || processing || isSubmittingRef.current) return;
+
             const now = Date.now();
             if (lastScanRef.current === scanned && now - lastScanTimeRef.current < 1200) return;
+
+            if (isAlreadyScanned(scanned)) {
+              showFeedback('warn', 'Already scanned.');
+              beep('error');
+              return;
+            }
+
             lastScanRef.current = scanned;
             lastScanTimeRef.current = now;
             showFeedback('warn', `Scan detected: ${scanned}`);
+
             try { await scanner.pause(true); } catch {}
+
             setCode(scanned);
+
             if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
             resumeTimerRef.current = setTimeout(() => {
-              if (scannerRef.current && cameraMode) scannerRef.current.resume().catch(() => {});
+              if (scannerRef.current && cameraMode) {
+                scannerRef.current.resume().catch(() => {});
+              }
             }, 600);
           },
           () => {}
         );
+
         if (mounted) showFeedback('info', 'Camera started. Point at barcode to scan.');
       } catch (err) {
         if (mounted) {
@@ -236,7 +309,9 @@ export default function ScannerPanel() {
         }
       }
     };
+
     startCamera();
+
     return () => {
       mounted = false;
       const scanner = scannerRef.current;
@@ -246,7 +321,7 @@ export default function ScannerPanel() {
       if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
       if (scanner) scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
     };
-  }, [cameraMode, canScan]);
+  }, [cameraMode, canScan, processing, mode, scannedCodes]);
 
   return (
     <div className="card overflow-hidden">
@@ -256,11 +331,34 @@ export default function ScannerPanel() {
             <h2 className="text-base font-semibold text-slate-900">Instant Entry Scanner</h2>
             <p className="mt-1 text-sm text-slate-500">Select date first, then scan or enter employee code.</p>
           </div>
+
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={`btn-secondary ${cameraMode ? 'border-brand-600 bg-brand-50 text-brand-700' : ''}`} onClick={() => setCameraMode((prev) => !prev)} disabled={!canScan || processing}>
-              <Camera className="h-4 w-4" />
-              {cameraMode ? 'Stop Camera' : 'Start Camera'}
+            <button
+              type="button"
+              className={`btn-secondary ${cameraMode && mode === 'scan' ? 'border-brand-600 bg-brand-50 text-brand-700' : ''}`}
+              onClick={() => {
+                setMode('scan');
+                setCameraMode((prev) => !prev);
+              }}
+              disabled={!canScan || processing}
+            >
+              <ScanBarcode className="h-4 w-4" />
+              {cameraMode && mode === 'scan' ? 'Stop Scan' : 'Scan Mode'}
             </button>
+
+            <button
+              type="button"
+              className={`btn-secondary ${mode === 'manual' ? 'border-brand-600 bg-brand-50 text-brand-700' : ''}`}
+              onClick={() => {
+                setMode((prev) => (prev === 'manual' ? 'scan' : 'manual'));
+                setCameraMode(false);
+              }}
+              disabled={processing}
+            >
+              <Keyboard className="h-4 w-4" />
+              {mode === 'manual' ? 'Manual Mode' : 'Manual Type'}
+            </button>
+
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-slate-400" />
               <input
@@ -283,18 +381,21 @@ export default function ScannerPanel() {
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                placeholder="Scan barcode or enter punch code"
+                placeholder={mode === 'manual' ? 'Type punch code manually' : 'Scan barcode or enter punch code'}
                 className="input"
                 disabled={!canScan || processing}
               />
+
               <button className="btn-secondary" onClick={handlePreview} disabled={!canScan || processing} type="button">
                 <SearchCheck className="h-4 w-4" />
                 Check
               </button>
+
               <button className="btn-primary" onClick={() => handleSubmit()} disabled={!canScan || processing} type="button">
                 {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
                 {processing ? 'Processing...' : 'Process Entry'}
               </button>
+
               <button
                 className={`btn-secondary ${canOverride ? 'border-amber-200 bg-amber-50 text-amber-700' : 'opacity-60'}`}
                 onClick={handleQuickOverride}
@@ -366,8 +467,8 @@ export default function ScannerPanel() {
               </div>
 
               <div className="mt-4 space-y-3 max-h-[520px] overflow-auto pr-1">
-                {halls.length ? (
-                  halls.map((hall) => <HallStatusCard key={hall?.id || hall?.name} hall={hall} />)
+                {hallData.length ? (
+                  hallData.map((hall) => <HallStatusCard key={hall?.id || hall?.name} hall={hall} />)
                 ) : (
                   <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                     No hall status data available.
@@ -384,7 +485,7 @@ export default function ScannerPanel() {
               <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
                 <div className="rounded-lg bg-slate-50 p-3">
                   <div className="text-xs text-slate-500">Total Halls</div>
-                  <div className="mt-1 font-semibold text-slate-900">{halls.length}</div>
+                  <div className="mt-1 font-semibold text-slate-900">{hallData.length}</div>
                 </div>
                 <div className="rounded-lg bg-slate-50 p-3">
                   <div className="text-xs text-slate-500">Full</div>
