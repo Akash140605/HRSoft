@@ -128,7 +128,7 @@ export function HRProvider({ children }) {
     return ok;
   };
 
-  // normal scan
+  // NORMAL SCAN – sab ke liye strict (HR bhi)
   const processEntry = (code) => {
     const emp = employeeMap.get(String(code).trim());
     if (!emp) return { ok: false, text: 'Employee code not found.', type: 'error' };
@@ -150,7 +150,7 @@ export function HRProvider({ children }) {
       now.getMinutes()
     ).padStart(2, '0')}`;
 
-    if (emp.weekOff === todayDay && state.currentRole !== 'HR') {
+    if (emp.weekOff === todayDay) {
       return {
         ok: false,
         weekOff: true,
@@ -210,7 +210,7 @@ export function HRProvider({ children }) {
     return { ok: true, entry, text: `${emp.name} saved in ${hall.name}.` };
   };
 
-  // HR override (week off + shift allowed but tagged)
+  // HR OVERRIDE – week off + out-of-shift allowed, tagged
   const hrOverrideEntry = ({ code, hallId, reason }) => {
     const emp = employeeMap.get(String(code).trim());
     const hall = state.halls.find((h) => h.id === hallId);
@@ -283,7 +283,7 @@ export function HRProvider({ children }) {
     return { ok: true, entry, text: `HR override saved for ${emp.name}.` };
   };
 
-  // HR transfer (also tagged)
+  // HR TRANSFER – also tagged
   const moveEmployeeToHall = ({ code, hallId, reason }) => {
     const emp = employeeMap.get(String(code).trim());
     const hall = state.halls.find((h) => h.id === hallId);
@@ -299,7 +299,10 @@ export function HRProvider({ children }) {
         String(e.code).trim() === String(emp.code).trim()
     );
 
-    if (idx === -1) return hrOverrideEntry({ code: emp.code, hallId, reason });
+    if (idx === -1) {
+      // aaj koi normal entry hi nahi bani – direct override
+      return hrOverrideEntry({ code: emp.code, hallId, reason });
+    }
 
     const todayDay = dayName(state.selectedDate);
     const now = new Date();

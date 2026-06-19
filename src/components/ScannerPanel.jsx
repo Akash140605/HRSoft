@@ -84,8 +84,17 @@ function MobileScanner({ onResult, onClose }) {
 }
 
 export default function ScannerPanel() {
-  const { state, loginHr, processEntry, hrOverrideEntry, moveEmployeeToHall, hallUsage, totals, activeEntries } =
-    useHR();
+  const {
+    state,
+    loginHr,
+    processEntry,
+    hrOverrideEntry,
+    moveEmployeeToHall,
+    hallUsage,
+    totals,
+    activeEntries
+  } = useHR();
+
   const [code, setCode] = useState('');
   const [hrLoginCode, setHrLoginCode] = useState('');
   const [selectedHall, setSelectedHall] = useState('H1');
@@ -115,14 +124,6 @@ export default function ScannerPanel() {
     );
   }, [activeEntries, query]);
 
-  const pushToast = (type, message) => {
-    setToast({ type, message });
-    if (type === 'success') playSuccess();
-    else playError();
-  };
-
-  const focusCode = () => codeInputRef.current?.focus();
-
   const playSuccess = () => {
     try {
       if (successBeepRef.current) {
@@ -141,6 +142,14 @@ export default function ScannerPanel() {
     } catch {}
   };
 
+  const pushToast = (type, message) => {
+    setToast({ type, message });
+    if (type === 'success') playSuccess();
+    else playError();
+  };
+
+  const focusCode = () => codeInputRef.current?.focus();
+
   const onHrLogin = () => {
     const ok = loginHr(hrLoginCode);
     pushToast(ok ? 'success' : 'error', ok ? 'HR login successful.' : 'Invalid HR code.');
@@ -151,17 +160,28 @@ export default function ScannerPanel() {
     focusCode();
   };
 
-  const onProcess = async () => {
-    if (!code.trim()) return pushToast('error', 'Code enter karo.');
+  // core process; ab value parameter le raha hai takki scan se direct call ho sake
+  const onProcess = async (value) => {
+    const finalCode = String(value ?? code).trim();
+    if (!finalCode) {
+      pushToast('error', 'Code enter karo.');
+      return;
+    }
+    if (!canScan) {
+      pushToast('error', 'Capacity locked.');
+      return;
+    }
+
     setBusy(true);
-    const res = await processEntry(code.trim());
+    const res = await processEntry(finalCode);
     pushToast(res.ok ? 'success' : res.type || 'error', res.text || 'Done');
 
+    // sirf week-off ke special HR shortcut ke liye
     if (!res.ok && res.weekOff && state.currentRole === 'HR') {
       const ok = window.confirm('Week off hai. HR override karna hai?');
       if (ok) {
         const ov = hrOverrideEntry({
-          code: code.trim(),
+          code: finalCode,
           hallId: selectedHall,
           reason: reason || 'Week off override by HR'
         });
@@ -176,6 +196,15 @@ export default function ScannerPanel() {
     setBusy(false);
   };
 
+  // scanner / mobile dono yahan aayenge
+  const handleScannedCode = async (val) => {
+    const value = String(val || '').trim();
+    if (!value) return;
+    setCode(value);
+    await onProcess(value);
+  };
+
+  // HR move/override – yahi out-of-shift / week-off ko allow karega
   const onMove = async () => {
     if (!code.trim() || !selectedHall || !reason.trim())
       return pushToast('error', 'Code, hall, reason sab required hain.');
@@ -194,10 +223,14 @@ export default function ScannerPanel() {
   };
 
   const handleMobileScanResult = (val) => {
-    const value = String(val || '').trim();
-    if (!value) return;
-    setCode(value);
-    onProcess();
+    handleScannedCode(val);
+  };
+
+  const handleInputKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleScannedCode(code);
+    }
   };
 
   return (
@@ -247,7 +280,7 @@ export default function ScannerPanel() {
             placeholder="Select employee code"
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && onProcess()}
+            onKeyDown={handleInputKeyDown}
             ref={codeInputRef}
           />
           <input
@@ -274,7 +307,8 @@ export default function ScannerPanel() {
             <Keyboard className="h-4 w-4" />
             {mode === 'scan' ? 'Manual Mode' : 'Scan Mode'}
           </button>
-          <button className="btn-primary" type="button" onClick={onProcess} disabled={busy || !canScan}>
+          {/* ab Process Entry optional hai, par rehne dete hain */}
+          <button className="btn-primary" type="button" onClick={() => onProcess()} disabled={busy || !canScan}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
             Process Entry
           </button>
@@ -326,17 +360,17 @@ export default function ScannerPanel() {
                 placeholder={mode === 'manual' ? 'Type punch code manually' : 'Scan or type code'}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && onProcess()}
+                onKeyDown={handleInputKeyDown}
               />
               <button className="btn-secondary" type="button" onClick={onQuickCopy}>
                 <Copy className="h-4 w-4" />
               </button>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="btn-secondary" type="button" onClick={onProcess}>
+              <button className="btn-secondary" type="button" onClick={() => onProcess()}>
                 Verify
               </button>
-              <button className="btn-primary" type="button" onClick={onProcess} disabled={busy || !canScan}>
+              <button className="btn-primary" type="button" onClick={() => onProcess()} disabled={busy || !canScan}>
                 {busy ? 'Saving...' : 'Save Entry'}
               </button>
               <button
