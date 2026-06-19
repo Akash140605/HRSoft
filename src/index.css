@@ -1,50 +1,58 @@
 @import "tailwindcss";
 
-
 @layer base {
   html, body, #root {
     height: 100%;
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply bg-slate-50 text-slate-900 antialiased text-[15px] leading-relaxed;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
 }
 
 @layer components {
   .card {
-    @apply rounded-none border border-slate-200 bg-white shadow-sm;
+    @apply rounded-lg border border-slate-200 bg-white shadow-md;
   }
 
   .input {
-    @apply w-full rounded-none border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-slate-600 focus:ring-0;
+    @apply w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-sm md:text-[15px] outline-none transition
+           focus:border-slate-700 focus:ring-2 focus:ring-slate-200;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-none border border-slate-900 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-slate-900 bg-slate-900
+           px-4 py-2.5 text-sm md:text-[15px] font-semibold text-white
+           transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-none border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white
+           px-4 py-2.5 text-sm md:text-[15px] font-semibold text-slate-800
+           transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-none border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-rose-300 bg-white
+           px-4 py-2.5 text-sm md:text-[15px] font-semibold text-rose-700
+           transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   .badge {
-    @apply inline-flex items-center rounded-none px-2.5 py-1 text-xs font-semibold;
+    @apply inline-flex items-center rounded-md px-3 py-1 text-xs md:text-[13px] font-semibold;
   }
 
   .table-wrap table {
-    @apply w-full border-collapse;
+    @apply w-full border-collapse text-sm md:text-[15px];
   }
 
   .table-wrap th {
-    @apply border-b border-slate-200 bg-slate-100 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600;
+    @apply border-b border-slate-200 bg-slate-100 px-4 py-3 text-left text-[11px] md:text-xs
+           font-bold uppercase tracking-wider text-slate-700;
   }
 
   .table-wrap td {
-    @apply border-b border-slate-100 px-4 py-3 text-sm text-slate-700;
+    @apply border-b border-slate-100 px-4 py-3 text-sm md:text-[15px] text-slate-800;
   }
 }

@@ -3,10 +3,17 @@ import { DEFAULT_EMPLOYEES, DEFAULT_HALLS, DEFAULT_HR_CODES, SHIFT_OPTIONS, DAYS
 
 const HRContext = createContext(null);
 const STORAGE_KEY = 'demo_hr_system_v3';
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const dateKey = (v) => String(v || '').slice(0, 10);
-const dayName = (dateStr) => new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long' });
-const nowTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const dayName = (dateStr) =>
+  new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long' });
+const nowTime = () =>
+  new Date().toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
 
 const normalizeEmployee = (e) => ({
   id: e.id,
@@ -31,6 +38,7 @@ const isInShift = (timeHHMM, shiftCode) => {
   const start = sh * 60 + sm;
   const end = eh * 60 + em;
 
+  // night shifts wrap
   if (shiftCode === 'C' || shiftCode === 'BB') return current >= start || current < end;
   return current >= start && current < end;
 };
@@ -103,7 +111,11 @@ export function HRProvider({ children }) {
       const used = activeEntries.filter((e) => e.hallId === preferred.id).length;
       if (used < preferred.capacity) return preferred;
     }
-    return state.halls.find((h) => activeEntries.filter((e) => e.hallId === h.id).length < h.capacity) || state.halls[0];
+    return (
+      state.halls.find(
+        (h) => activeEntries.filter((e) => e.hallId === h.id).length < h.capacity
+      ) || state.halls[0]
+    );
   };
 
   const loginHr = (hrCode) => {
@@ -116,23 +128,46 @@ export function HRProvider({ children }) {
     return ok;
   };
 
+  // normal scan
   const processEntry = (code) => {
     const emp = employeeMap.get(String(code).trim());
     if (!emp) return { ok: false, text: 'Employee code not found.', type: 'error' };
 
-    const already = activeEntries.some((e) => String(e.code).trim() === String(emp.code).trim());
-    if (already) return { ok: false, duplicate: true, text: 'Already scanned today.', type: 'warn' };
+    const already = activeEntries.some(
+      (e) => String(e.code).trim() === String(emp.code).trim()
+    );
+    if (already)
+      return {
+        ok: false,
+        duplicate: true,
+        text: 'Already scanned today.',
+        type: 'warn'
+      };
 
     const todayDay = dayName(state.selectedDate);
     const now = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(
+      now.getMinutes()
+    ).padStart(2, '0')}`;
 
     if (emp.weekOff === todayDay && state.currentRole !== 'HR') {
-      return { ok: false, weekOff: true, employee: emp, text: `${emp.name} is week off today.`, type: 'warn' };
+      return {
+        ok: false,
+        weekOff: true,
+        employee: emp,
+        text: `${emp.name} is week off today.`,
+        type: 'warn'
+      };
     }
 
     if (!isInShift(hhmm, emp.shift)) {
-      return { ok: false, shiftBlocked: true, employee: emp, text: `${emp.name} is outside shift timing.`, type: 'warn' };
+      return {
+        ok: false,
+        shiftBlocked: true,
+        employee: emp,
+        text: `${emp.name} is outside shift timing.`,
+        type: 'warn'
+      };
     }
 
     const hall = getNextHallForEmployee(emp);
@@ -175,16 +210,35 @@ export function HRProvider({ children }) {
     return { ok: true, entry, text: `${emp.name} saved in ${hall.name}.` };
   };
 
+  // HR override (week off + shift allowed but tagged)
   const hrOverrideEntry = ({ code, hallId, reason }) => {
     const emp = employeeMap.get(String(code).trim());
     const hall = state.halls.find((h) => h.id === hallId);
 
-    if (!emp || !hall || !reason) return { ok: false, text: 'Invalid override data.', type: 'error' };
-    if (state.currentRole !== 'HR') return { ok: false, text: 'HR login required.', type: 'error' };
+    if (!emp || !hall || !reason)
+      return { ok: false, text: 'Invalid override data.', type: 'error' };
+    if (state.currentRole !== 'HR')
+      return { ok: false, text: 'HR login required.', type: 'error' };
 
-    const already = activeEntries.find((e) => String(e.code).trim() === String(emp.code).trim());
+    const already = activeEntries.find(
+      (e) => String(e.code).trim() === String(emp.code).trim()
+    );
 
+    const todayDay = dayName(state.selectedDate);
     const now = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(
+      now.getMinutes()
+    ).padStart(2, '0')}`;
+
+    const isWeekOff = emp.weekOff === todayDay;
+    const outOfShift = !isInShift(hhmm, emp.shift);
+
+    const baseReason = reason || '';
+    const reasonTag =
+      baseReason +
+      (isWeekOff ? ' | WEEK_OFF' : '') +
+      (outOfShift ? ' | OUT_OF_SHIFT' : '');
+
     const entry = {
       id: Date.now(),
       code: emp.code,
@@ -195,27 +249,31 @@ export function HRProvider({ children }) {
       hallName: hall.name,
       status: 'Present',
       source: 'HR_OVERRIDE',
-      day: dayName(state.selectedDate),
+      day: todayDay,
       date: `${state.selectedDate}T${now.toTimeString().slice(0, 8)}`,
       time: nowTime(),
       hrCode: state.currentHrCode,
       hrAction: already ? 'MOVE_TO_OTHER_HALL' : 'FORCE_ENTRY',
-      overrideReason: reason
+      overrideReason: reasonTag
     };
 
     setState((prev) => ({
       ...prev,
-      entries: already ? prev.entries.map((e) => (e.id === already.id ? entry : e)) : [entry, ...prev.entries],
+      entries: already
+        ? prev.entries.map((e) => (e.id === already.id ? entry : e))
+        : [entry, ...prev.entries],
       logs: [
         {
           id: entry.id,
           type: 'HR_OVERRIDE',
-          message: `${emp.name} -> ${hall.name} | ${reason}`,
+          message: `${emp.name} -> ${hall.name} | ${baseReason}` +
+            (isWeekOff ? ' | WEEK_OFF' : '') +
+            (outOfShift ? ' | OUT_OF_SHIFT' : ''),
           by: state.currentHrCode,
           employeeCode: emp.code,
           hallId: hall.id,
           hallName: hall.name,
-          overrideReason: reason,
+          overrideReason: entry.overrideReason,
           at: entry.date
         },
         ...prev.logs
@@ -225,18 +283,38 @@ export function HRProvider({ children }) {
     return { ok: true, entry, text: `HR override saved for ${emp.name}.` };
   };
 
+  // HR transfer (also tagged)
   const moveEmployeeToHall = ({ code, hallId, reason }) => {
     const emp = employeeMap.get(String(code).trim());
     const hall = state.halls.find((h) => h.id === hallId);
 
-    if (!emp || !hall || !reason) return { ok: false, text: 'Invalid move data.', type: 'error' };
-    if (state.currentRole !== 'HR') return { ok: false, text: 'HR login required.', type: 'error' };
+    if (!emp || !hall || !reason)
+      return { ok: false, text: 'Invalid move data.', type: 'error' };
+    if (state.currentRole !== 'HR')
+      return { ok: false, text: 'HR login required.', type: 'error' };
 
     const idx = state.entries.findIndex(
-      (e) => dateKey(e.date) === state.selectedDate && String(e.code).trim() === String(emp.code).trim()
+      (e) =>
+        dateKey(e.date) === state.selectedDate &&
+        String(e.code).trim() === String(emp.code).trim()
     );
 
     if (idx === -1) return hrOverrideEntry({ code: emp.code, hallId, reason });
+
+    const todayDay = dayName(state.selectedDate);
+    const now = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(
+      now.getMinutes()
+    ).padStart(2, '0')}`;
+
+    const isWeekOff = emp.weekOff === todayDay;
+    const outOfShift = !isInShift(hhmm, emp.shift);
+
+    const baseReason = reason || '';
+    const reasonTag =
+      baseReason +
+      (isWeekOff ? ' | WEEK_OFF' : '') +
+      (outOfShift ? ' | OUT_OF_SHIFT' : '');
 
     const updated = {
       ...state.entries[idx],
@@ -245,7 +323,7 @@ export function HRProvider({ children }) {
       source: 'HR_TRANSFER',
       hrCode: state.currentHrCode,
       hrAction: 'MOVE_TO_OTHER_HALL',
-      overrideReason: reason
+      overrideReason: reasonTag
     };
 
     setState((prev) => {
@@ -259,12 +337,14 @@ export function HRProvider({ children }) {
           {
             id: Date.now(),
             type: 'HR_TRANSFER',
-            message: `${emp.name} -> ${hall.name} | ${reason}`,
+            message: `${emp.name} -> ${hall.name} | ${baseReason}` +
+              (isWeekOff ? ' | WEEK_OFF' : '') +
+              (outOfShift ? ' | OUT_OF_SHIFT' : ''),
             by: state.currentHrCode,
             employeeCode: emp.code,
             hallId: hall.id,
             hallName: hall.name,
-            overrideReason: reason,
+            overrideReason: updated.overrideReason,
             at: new Date().toISOString()
           },
           ...prev.logs

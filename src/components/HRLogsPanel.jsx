@@ -10,10 +10,11 @@ export default function HRLogsPanel() {
   const [actionType, setActionType] = useState('');
   const [selectedHrId, setSelectedHrId] = useState('');
 
+  // Sirf jahan by (HR code) hai, wahi HR ID list me aayegi
   const hrIds = useMemo(() => {
     const ids = new Set();
     (state.logs || []).forEach((log) => {
-      const id = String(log.by || log.hrCode || '').trim();
+      const id = String(log.by || '').trim();
       if (id) ids.add(id);
     });
     return Array.from(ids).sort();
@@ -21,15 +22,18 @@ export default function HRLogsPanel() {
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
+
     return (state.logs || []).filter((log) => {
-      const logHr = String(log.by || log.hrCode || '').trim();
+      const logHr = String(log.by || '').trim();           // HR ID
       const logEmp = String(log.employeeCode || log.code || '').trim();
       const text = `${log.type || ''} ${log.message || ''} ${logHr} ${logEmp} ${log.hallName || ''} ${log.overrideReason || ''}`.toLowerCase();
-      const hrOk = !hrCode || logHr === hrCode.trim();
-      const selectedHrOk = !selectedHrId || logHr === selectedHrId;
+
+      const hrOk = !hrCode || logHr === hrCode.trim();          // manual input filter
+      const selectedHrOk = !selectedHrId || logHr === selectedHrId; // dropdown filter
       const empOk = !employeeCode || logEmp === employeeCode.trim();
       const actOk = !actionType || String(log.type || '').trim() === actionType.trim();
       const qOk = !q || text.includes(q);
+
       return hrOk && selectedHrOk && empOk && actOk && qOk;
     });
   }, [actionType, employeeCode, hrCode, query, selectedHrId, state.logs]);
@@ -50,12 +54,14 @@ export default function HRLogsPanel() {
   };
 
   return (
-    <div className="card overflow-hidden">
+    <div className="card overflow-hidden border border-slate-200 bg-white shadow-xl">
       <div className="border-b border-slate-200 bg-white px-5 py-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-base font-semibold text-slate-900">HR Action Logs</h2>
-            <p className="mt-1 text-sm text-slate-500">HR ID-wise actions, employee-wise filters, and audit tracking.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              HR ID-wise actions, employee-wise filters, and audit tracking.
+            </p>
           </div>
           <button className="btn-secondary" type="button" onClick={exportCsv}>
             <Download className="h-4 w-4" />
@@ -76,10 +82,16 @@ export default function HRLogsPanel() {
             />
           </div>
 
-          <select className="input" value={selectedHrId} onChange={(e) => setSelectedHrId(e.target.value)}>
+          <select
+            className="input"
+            value={selectedHrId}
+            onChange={(e) => setSelectedHrId(e.target.value)}
+          >
             <option value="">All HR IDs</option>
             {hrIds.map((id) => (
-              <option key={id} value={id}>{id}</option>
+              <option key={id} value={id}>
+                {id}
+              </option>
             ))}
           </select>
 
@@ -124,23 +136,29 @@ export default function HRLogsPanel() {
             </tr>
           </thead>
           <tbody>
-            {rows.length ? rows.map((row) => (
-              <tr key={row.id}>
-                <td>{row.at ? String(row.at).slice(0, 19).replace('T', ' ') : '-'}</td>
-                <td>
-                  <span className="badge border border-slate-300 bg-white text-slate-700">
-                    {row.type || '-'}
-                  </span>
-                </td>
-                <td>{row.message || '-'}</td>
-                <td className="font-medium text-slate-900">{row.by || row.hrCode || '-'}</td>
-                <td>{row.employeeCode || row.code || '-'}</td>
-                <td>{row.hallName || '-'}</td>
-                <td>{row.overrideReason || '-'}</td>
-              </tr>
-            )) : (
+            {rows.length ? (
+              rows.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.at ? String(row.at).slice(0, 19).replace('T', ' ') : '-'}</td>
+                  <td>
+                    <span className="badge border border-slate-300 bg-white text-slate-700">
+                      {row.type || '-'}
+                    </span>
+                  </td>
+                  <td>{row.message || '-'}</td>
+                  <td className="font-medium text-slate-900">
+                    {row.by || row.hrCode || (row.type === 'SCAN' ? 'SYSTEM' : '-')}
+                  </td>
+                  <td>{row.employeeCode || row.code || '-'}</td>
+                  <td>{row.hallName || '-'}</td>
+                  <td>{row.overrideReason || '-'}</td>
+                </tr>
+              ))
+            ) : (
               <tr>
-                <td colSpan="7" className="py-10 text-center text-sm text-slate-500">No HR logs found.</td>
+                <td colSpan="7" className="py-10 text-center text-sm text-slate-500">
+                  No HR logs found.
+                </td>
               </tr>
             )}
           </tbody>
