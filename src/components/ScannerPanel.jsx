@@ -49,19 +49,45 @@ function MobileScanner({ onResult, onClose }) {
   const containerId = 'mobile-scanner-container';
 
   useEffect(() => {
-    const scanner = new Html5QrcodeScanner(containerId, { fps: 10, qrbox: 250 }, false);
+    let scanner;
 
-    scanner.render(
-      (decodedText) => {
-        onResult(decodedText);
-        scanner.clear().catch(() => {});
-        onClose();
-      },
-      () => {}
-    );
+    async function start() {
+      try {
+        scanner = new Html5QrcodeScanner(
+          containerId,
+          {
+            fps: 10,
+            qrbox: 250,
+            // disable file upload tab (kabhi kabhi white screen issue deta)
+            disableFlip: false
+          },
+          false
+        );
+
+        scanner.render(
+          (decodedText) => {
+            onResult(decodedText);
+            scanner.clear().catch(() => {});
+            onClose();
+          },
+          (error) => {
+            // debug ke liye
+            console.log('Scan error:', error);
+          }
+        );
+      } catch (err) {
+        console.log('Scanner init error:', err);
+      }
+    }
+
+    // thoda delay, taaki modal render ho jaye
+    const t = setTimeout(start, 300);
 
     return () => {
-      scanner.clear().catch(() => {});
+      clearTimeout(t);
+      if (scanner) {
+        scanner.clear().catch(() => {});
+      }
     };
   }, [onClose, onResult]);
 
