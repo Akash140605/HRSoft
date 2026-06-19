@@ -10,6 +10,36 @@ const toneMap = {
   info: 'border-slate-200 bg-slate-50 text-slate-700'
 };
 
+function Toast({ toast, onClose }) {
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(onClose, 2200);
+    return () => clearTimeout(t);
+  }, [toast, onClose]);
+
+  if (!toast) return null;
+
+  const cls =
+    toast.type === 'success'
+      ? 'bg-emerald-600 text-white'
+      : toast.type === 'error'
+      ? 'bg-rose-600 text-white'
+      : toast.type === 'warn'
+      ? 'bg-amber-500 text-white'
+      : 'bg-slate-800 text-white';
+
+  const Icon = toast.type === 'success' ? CheckCircle2 : toast.type === 'error' ? XCircle : AlertTriangle;
+
+  return (
+    <div className={`fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-xl px-4 py-3 shadow-lg ${cls}`}>
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <Icon className="h-4 w-4" />
+        {toast.message}
+      </div>
+    </div>
+  );
+}
+
 function ScanBadge({ status, text }) {
   const icon =
     status === 'success' ? <CheckCircle2 className="h-4 w-4" /> :
@@ -34,11 +64,13 @@ function HallStatusCard({ hall }) {
   const safeCapacity = Number.isFinite(capacity) && capacity > 0 ? capacity : 0;
   const occupancy = safeCapacity > 0 ? Math.round((safeCount / safeCapacity) * 100) : 0;
   const status = safeCapacity === 0 ? 'ok' : occupancy >= 100 ? 'full' : occupancy >= 75 ? 'filling' : 'ok';
+
   const meta = {
     full: { label: 'Full', cls: 'bg-rose-100 text-rose-700 border-rose-200', icon: XCircle },
     filling: { label: 'Filling', cls: 'bg-amber-100 text-amber-700 border-amber-200', icon: AlertTriangle },
     ok: { label: 'Open', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: CheckCircle2 }
   }[status];
+
   const Icon = meta.icon;
 
   return (
@@ -87,6 +119,7 @@ export default function ScannerPanel() {
   const [cameraMode, setCameraMode] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [feedback, setFeedback] = useState({ status: 'info', text: 'System is ready.' });
+  const [toast, setToast] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
 
@@ -126,6 +159,7 @@ export default function ScannerPanel() {
   };
 
   const showFeedback = (status, text) => setFeedback({ status, text });
+  const pushToast = (type, message) => setToast({ type, message });
 
   const stopCamera = async () => {
     const scanner = scannerRef.current;
@@ -146,8 +180,12 @@ export default function ScannerPanel() {
     if (!value) return;
     const result = checkEligibility(value);
     setPreview(result);
-    if (result?.duplicate) showFeedback('warn', 'Already scanned / duplicate entry.');
-    else showFeedback('info', 'Preview loaded.');
+    if (result?.duplicate) {
+      showFeedback('warn', 'Already scanned / duplicate entry.');
+      pushToast('warn', 'Already scanned / duplicate entry.');
+    } else {
+      showFeedback('info', 'Preview loaded.');
+    }
   };
 
   const handleSubmit = async (value = code, source = 'manual') => {
@@ -159,6 +197,7 @@ export default function ScannerPanel() {
       setCode('');
       beep('error');
       showFeedback('warn', 'Already scanned / duplicate entry.');
+      pushToast('warn', 'Already scanned / duplicate entry.');
       return;
     }
 
@@ -174,7 +213,9 @@ export default function ScannerPanel() {
       if (result?.ok) {
         handledCodesRef.current.add(trimmed);
         setScanSuccess(true);
-        showFeedback('success', source === 'camera' ? 'Verified. Scan saved successfully.' : 'Verified. Entry saved successfully.');
+        const msg = source === 'camera' ? 'Verified. Scan saved successfully.' : 'Verified. Entry saved successfully.';
+        showFeedback('success', msg);
+        pushToast('success', msg);
         beep('success');
 
         if (source === 'camera') {
@@ -186,8 +227,13 @@ export default function ScannerPanel() {
         }
       } else {
         beep('error');
-        if (result?.duplicate) showFeedback('warn', 'Already scanned / duplicate entry.');
-        else showFeedback('error', result?.text || 'Scan failed.');
+        if (result?.duplicate) {
+          showFeedback('warn', 'Already scanned / duplicate entry.');
+          pushToast('warn', 'Already scanned / duplicate entry.');
+        } else {
+          showFeedback('error', result?.text || 'Scan failed.');
+          pushToast('error', result?.text || 'Scan failed.');
+        }
       }
     } finally {
       setProcessing(false);
@@ -226,9 +272,11 @@ export default function ScannerPanel() {
       beep('success');
       setScanSuccess(true);
       showFeedback('success', 'Verified by HR override.');
+      pushToast('success', 'Verified by HR override.');
     } else {
       beep('error');
       showFeedback('error', 'Override failed.');
+      pushToast('error', 'Override failed.');
     }
   };
 
@@ -268,6 +316,7 @@ export default function ScannerPanel() {
             if (handledCodesRef.current.has(scanned)) {
               beep('error');
               showFeedback('warn', 'Already scanned / duplicate entry.');
+              pushToast('warn', 'Already scanned / duplicate entry.');
               setScanSuccess(false);
               try { await scanner.pause(true); } catch {}
               setTimeout(() => {
@@ -277,17 +326,22 @@ export default function ScannerPanel() {
             }
 
             showFeedback('warn', `Scan detected: ${scanned}`);
+            pushToast('info', `Scan detected: ${scanned}`);
             setCode(scanned);
             handleSubmit(scanned, 'camera');
           },
           () => {}
         );
 
-        if (mounted) showFeedback('info', 'Camera started. Point at barcode to scan.');
+        if (mounted) {
+          showFeedback('info', 'Camera started. Point at barcode to scan.');
+          pushToast('info', 'Camera started. Point at barcode to scan.');
+        }
       } catch (err) {
         if (mounted) {
           setCameraError(err?.message || 'Camera could not be started.');
           setCameraMode(false);
+          pushToast('error', err?.message || 'Camera could not be started.');
         }
       }
     };
@@ -307,13 +361,14 @@ export default function ScannerPanel() {
 
   return (
     <div className="card overflow-hidden">
+      <Toast toast={toast} onClose={() => setToast(null)} />
+
       <div className="border-b border-slate-200 bg-white px-5 py-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Instant Entry Scanner</h2>
             <p className="mt-1 text-sm text-slate-500">Scan mode aur manual mode dono available hain.</p>
           </div>
-
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
