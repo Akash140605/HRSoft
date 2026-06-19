@@ -1,133 +1,50 @@
 @import "tailwindcss";
 
-@theme {
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-300: #93c5fd;
-  --color-brand-400: #60a5fa;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
-  --color-brand-800: #1e40af;
-  --color-brand-900: #1e3a8a;
 
-  --shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.08);
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 30px rgba(15, 23, 42, 0.06);
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
 }
 
-:root {
-  color-scheme: light;
-}
+@layer components {
+  .card {
+    @apply rounded-none border border-slate-200 bg-white shadow-sm;
+  }
 
-html,
-body,
-#root {
-  min-height: 100%;
-}
+  .input {
+    @apply w-full rounded-none border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-slate-600 focus:ring-0;
+  }
 
-* {
-  box-sizing: border-box;
-}
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-none border border-slate-900 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50;
+  }
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  margin: 0;
-}
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-none border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50;
+  }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-none border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
 
-button {
-  cursor: pointer;
-}
+  .badge {
+    @apply inline-flex items-center rounded-none px-2.5 py-1 text-xs font-semibold;
+  }
 
-img,
-svg {
-  display: block;
-}
+  .table-wrap table {
+    @apply w-full border-collapse;
+  }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #94a3b8 transparent;
-}
+  .table-wrap th {
+    @apply border-b border-slate-200 bg-slate-100 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600;
+  }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 999px;
-}
-
-::selection {
-  background: #dbeafe;
-  color: #0f172a;
-}
-
-.input {
-  @apply w-full rounded-none border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition;
-  @apply focus:border-brand-600 focus:ring-2 focus:ring-brand-200;
-}
-
-.card {
-  @apply rounded-none border border-slate-200 bg-white shadow-card;
-}
-
-.badge {
-  @apply inline-flex items-center rounded-none px-2.5 py-1 text-xs font-semibold;
-}
-
-.btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-none bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white transition;
-  @apply hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-50;
-}
-
-.btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 rounded-none border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition;
-  @apply hover:bg-slate-50;
-}
-
-.btn-danger {
-  @apply inline-flex items-center justify-center gap-2 rounded-none bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition;
-  @apply hover:bg-rose-700;
-}
-
-.table-wrap {
-  @apply overflow-auto rounded-none border border-slate-200 bg-white;
-}
-
-table {
-  @apply min-w-full border-collapse;
-}
-
-thead th {
-  @apply sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-slate-700;
-}
-
-td,
-th {
-  @apply whitespace-nowrap border-b border-slate-200 px-3 py-3 text-left text-sm;
-}
-
-h1,
-h2,
-h3,
-h4 {
-  @apply tracking-tight text-slate-900;
-}
-#hr-camera-reader video {
-  width: 100% !important;
-  border-radius: 0;
-}
-
-#hr-camera-reader canvas {
-  width: 100% !important;
+  .table-wrap td {
+    @apply border-b border-slate-100 px-4 py-3 text-sm text-slate-700;
+  }
 }
