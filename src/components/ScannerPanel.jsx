@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useHR } from '../context/HRContext';
 
-// IMPORTANT: set worker path once (e.g. in index.js or here)
+// worker path (public folder me file rakho)
 QrScanner.WORKER_PATH = '/qr-scanner-worker.min.js';
 
 function Toast({ toast, onClose }) {
@@ -128,7 +128,6 @@ export default function ScannerPanel() {
     focusCode();
   };
 
-  // core process; scanner ya manual dono yahi use karenge
   const onProcess = async (value) => {
     const finalCode = String(value ?? code).trim();
     if (!finalCode) {
@@ -144,7 +143,6 @@ export default function ScannerPanel() {
     const res = await processEntry(finalCode);
     pushToast(res.ok ? 'success' : res.type || 'error', res.text || 'Done');
 
-    // sirf week-off ke liye HR shortcut
     if (!res.ok && res.weekOff && state.currentRole === 'HR') {
       const ok = window.confirm('Week off hai. HR override karna hai?');
       if (ok) {
@@ -164,11 +162,9 @@ export default function ScannerPanel() {
     setBusy(false);
   };
 
-  // scanner + manual Enter dono ye use karenge
   const handleScannedCode = async (val) => {
     const now = Date.now();
-    // 2 second ka gap har scan ke beech
-    if (now - lastScanTimeRef.current < 2000) return;
+    if (now - lastScanTimeRef.current < 2000) return; // 2 sec gap
     lastScanTimeRef.current = now;
 
     const value = String(val || '').trim();
@@ -185,7 +181,6 @@ export default function ScannerPanel() {
     }
   };
 
-  // HR move / override
   const onMove = async () => {
     if (!code.trim() || !selectedHall || !reason.trim())
       return pushToast('error', 'Code, hall, reason sab required hain.');
@@ -203,7 +198,6 @@ export default function ScannerPanel() {
     }
   };
 
-  // camera start / stop
   const startCamera = async () => {
     if (scannerRef.current || !videoRef.current) {
       setCameraOn(true);
@@ -242,7 +236,6 @@ export default function ScannerPanel() {
   };
 
   useEffect(() => {
-    // component unmount ya route change pe clean up
     return () => {
       if (scannerRef.current) {
         scannerRef.current.stop().then(() => scannerRef.current?.destroy()).catch(() => {});
@@ -253,7 +246,6 @@ export default function ScannerPanel() {
 
   return (
     <div className="card overflow-hidden border border-slate-200 bg-white shadow-xl">
-      {/* sounds */}
       <audio ref={successBeepRef} src="/beep.wav" preload="auto" />
       <audio ref={errorBeepRef} src="/error.wav" preload="auto" />
       <Toast toast={toast} onClose={() => setToast(null)} />
@@ -392,7 +384,6 @@ export default function ScannerPanel() {
               )}
             </div>
 
-            {/* live camera below */}
             <div className="mt-3 rounded-lg border border-slate-200 bg-black/90 p-2">
               <video
                 ref={videoRef}
