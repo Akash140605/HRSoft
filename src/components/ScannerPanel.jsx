@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, ScanLine, SearchCheck, CalendarDays, ShieldAlert } from 'lucide-react';
+import { Camera, ScanLine, SearchCheck, CalendarDays, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Loader2, Factory, Users, Activity } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { useHR } from '../context/HRContext';
-
 
 const toneMap = {
   success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
@@ -11,71 +10,174 @@ const toneMap = {
   info: 'border-slate-200 bg-slate-50 text-slate-700'
 };
 
+const statusMeta = {
+  full: { label: 'Full', cls: 'bg-rose-100 text-rose-700 border-rose-200', icon: XCircle },
+  filling: { label: 'Filling', cls: 'bg-amber-100 text-amber-700 border-amber-200', icon: AlertTriangle },
+  ok: { label: 'Open', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: CheckCircle2 }
+};
+
+function ScanBadge({ status, text }) {
+  const icon =
+    status === 'success' ? <CheckCircle2 className="h-4 w-4" /> :
+    status === 'error' ? <XCircle className="h-4 w-4" /> :
+    status === 'warn' ? <AlertTriangle className="h-4 w-4" /> : null;
+
+  return (
+    <div className={`rounded-none border px-4 py-3 text-sm ${toneMap[status] || toneMap.info}`}>
+      <div className="flex items-center gap-2 font-semibold capitalize">
+        {icon}
+        {status || 'info'}
+      </div>
+      <div className="mt-1">{text || 'System is ready.'}</div>
+    </div>
+  );
+}
+
+function HallStatusCard({ hall }) {
+  const meta = statusMeta[hall.status] || statusMeta.ok;
+  const Icon = meta.icon;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <Factory className="h-4 w-4 text-slate-500" />
+            {hall.name}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">{hall.location || 'Production floor'}</div>
+        </div>
+
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.cls}`}>
+          <Icon className="h-3.5 w-3.5" />
+          {meta.label}
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-lg bg-slate-50 p-3">
+          <div className="text-xs text-slate-500">Capacity</div>
+          <div className="mt-1 font-semibold text-slate-900">{hall.count}/{hall.capacity}</div>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-3">
+          <div className="text-xs text-slate-500">Occupancy</div>
+          <div className="mt-1 font-semibold text-slate-900">{Math.round((hall.count / hall.capacity) * 100)}%</div>
+        </div>
+      </div>
+
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full ${
+            hall.status === 'full' ? 'bg-rose-500' : hall.status === 'filling' ? 'bg-amber-500' : 'bg-emerald-500'
+          }`}
+          style={{ width: `${Math.min(100, (hall.count / hall.capacity) * 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function ScannerPanel() {
-  const {
-    state,
-    setSelectedDate,
-    processEntry,
-    checkEligibility,
-    overrideEntry,
-    lastMessage,
-    totals,
-    canOverride
-  } = useHR();
-
+  const { state, setSelectedDate, processEntry, checkEligibility, overrideEntry, lastMessage, totals, canOverride } = useHR();
 
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState(null);
   const [cameraMode, setCameraMode] = useState(false);
   const [cameraError, setCameraError] = useState('');
+  const [feedback, setFeedback] = useState({ status: 'info', text: 'System is ready.' });
+  const [processing, setProcessing] = useState(false);
+  const [scanSuccess, setScanSuccess] = useState(false);
+
   const scannerRef = useRef(null);
+  const isSubmittingRef = useRef(false);
   const lastScanRef = useRef('');
   const lastScanTimeRef = useRef(0);
-
+  const resumeTimerRef = useRef(null);
 
   const canScan = useMemo(() => !totals.locked, [totals.locked]);
+  const halls = state?.halls || [];
+  const activeHalls = halls.filter((h) => h.status === 'full' || h.status === 'filling');
 
-
-  const playBeep = (type = 'success') => {
+  const beep = (type = 'success') => {
     try {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      const audioCtx = new AudioContextClass();
-      const oscillator = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = type === 'success' ? 880 : 220;
-      gain.gain.value = 0.08;
-      oscillator.connect(gain);
-      gain.connect(audioCtx.destination);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.12);
-      oscillator.onended = () => audioCtx.close();
+      const ctx = new AudioContextClass();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = type === 'success' ? 880 : 220;
+      gain.gain.value = 0.07;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+      osc.onended = () => ctx.close();
     } catch {}
   };
 
+  const showFeedback = (status, text) => setFeedback({ status, text });
+
+  const stopCamera = async () => {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+
+    if (resumeTimerRef.current) {
+      clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+    }
+
+    setCameraMode(false);
+
+    if (scanner) {
+      try {
+        await scanner.stop();
+      } catch {}
+      try {
+        await scanner.clear();
+      } catch {}
+    }
+  };
 
   const handlePreview = () => {
     const value = code.trim();
     if (!value) return;
     setPreview(checkEligibility(value));
+    showFeedback('info', 'Preview loaded.');
   };
 
-
-  const handleSubmit = (value = code) => {
+  const handleSubmit = async (value = code, source = 'manual') => {
     const trimmed = String(value).trim();
-    if (!trimmed) return;
-    const result = processEntry(trimmed);
-    setPreview(null);
-    setCode('');
-    if (result?.ok) playBeep('success');
-    else playBeep('error');
-  };
+    if (!trimmed || isSubmittingRef.current) return;
 
+    isSubmittingRef.current = true;
+    setProcessing(true);
+    setScanSuccess(false);
+
+    try {
+      const result = processEntry(trimmed);
+      setPreview(null);
+      setCode('');
+
+      if (result?.ok) {
+        beep('success');
+        setScanSuccess(true);
+        showFeedback('success', source === 'camera' ? 'Verified. Scan saved successfully.' : 'Verified. Entry saved successfully.');
+        if (source === 'camera') await stopCamera();
+      } else {
+        beep('error');
+        setScanSuccess(false);
+        showFeedback('error', result?.text || 'Scan failed.');
+      }
+    } finally {
+      setProcessing(false);
+      isSubmittingRef.current = false;
+    }
+  };
 
   const handleQuickOverride = () => {
     const value = code.trim();
     if (!value) return;
+
     const result = checkEligibility(value);
     if (result?.ok) return;
 
@@ -84,7 +186,6 @@ export default function ScannerPanel() {
 
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
 
     const ok = overrideEntry({
       code: employee.code,
@@ -97,75 +198,68 @@ export default function ScannerPanel() {
       overriddenBy: 'HR'
     });
 
-
     if (ok) {
       setCode('');
       setPreview(null);
-      playBeep('success');
+      beep('success');
+      setScanSuccess(true);
+      showFeedback('success', 'Verified by HR override.');
     } else {
-      playBeep('error');
+      beep('error');
+      showFeedback('error', 'Override failed.');
     }
   };
 
-
-  // Process entry when code is set from scanner (debounced via lastScanTimeRef)
   useEffect(() => {
     if (!code) return;
     const trimmed = code.trim();
     if (!trimmed) return;
-    handleSubmit(trimmed);
+    handleSubmit(trimmed, 'manual');
   }, [code]);
-
 
   useEffect(() => {
     let mounted = true;
-
 
     const startCamera = async () => {
       if (!cameraMode || !canScan) return;
       setCameraError('');
 
-
       try {
         const scanner = new Html5Qrcode('hr-camera-reader');
         scannerRef.current = scanner;
 
-
         await scanner.start(
           { facingMode: 'environment' },
-          { 
-            fps: 10, 
-            qrbox: { width: 240, height: 120 },
-            // debounce: reduce continuous scans
-            continuous: true
-          },
+          { fps: 10, qrbox: { width: 260, height: 130 }, continuous: true },
           async (decodedText) => {
             const scanned = String(decodedText).trim();
-            if (!scanned) return;
-
+            if (!scanned || processing || isSubmittingRef.current) return;
 
             const now = Date.now();
-            // Debounce: ignore if same scan within 300ms
-            if (lastScanRef.current === scanned && now - lastScanTimeRef.current < 300) {
-              return;
-            }
-
-
-            // Ignore if exactly same code and very recent (avoid duplicates)
-            if (lastScanRef.current === scanned && now - lastScanTimeRef.current < 500) {
-              return;
-            }
-
+            if (lastScanRef.current === scanned && now - lastScanTimeRef.current < 1200) return;
 
             lastScanRef.current = scanned;
             lastScanTimeRef.current = now;
 
+            showFeedback('warn', `Scan detected: ${scanned}`);
+
+            try {
+              await scanner.pause(true);
+            } catch {}
 
             setCode(scanned);
-            // Do NOT call handleSubmit here directly; let the code-effect handle it
+
+            if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+            resumeTimerRef.current = setTimeout(() => {
+              if (scannerRef.current && cameraMode) {
+                scannerRef.current.resume().catch(() => {});
+              }
+            }, 600);
           },
           () => {}
         );
+
+        if (mounted) showFeedback('info', 'Camera started. Point at barcode to scan.');
       } catch (err) {
         if (mounted) {
           setCameraError(err?.message || 'Camera could not be started.');
@@ -174,9 +268,7 @@ export default function ScannerPanel() {
       }
     };
 
-
     startCamera();
-
 
     return () => {
       mounted = false;
@@ -184,12 +276,14 @@ export default function ScannerPanel() {
       scannerRef.current = null;
       lastScanRef.current = '';
       lastScanTimeRef.current = 0;
+
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+
       if (scanner) {
         scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
       }
     };
   }, [cameraMode, canScan]);
-
 
   return (
     <div className="card overflow-hidden">
@@ -197,23 +291,19 @@ export default function ScannerPanel() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Instant Entry Scanner</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Select date first, then scan or enter employee code.
-            </p>
+            <p className="mt-1 text-sm text-slate-500">Select date first, then scan or enter employee code.</p>
           </div>
-
 
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               className={`btn-secondary ${cameraMode ? 'border-brand-600 bg-brand-50 text-brand-700' : ''}`}
               onClick={() => setCameraMode((prev) => !prev)}
-              disabled={!canScan}
+              disabled={!canScan || processing}
             >
               <Camera className="h-4 w-4" />
               {cameraMode ? 'Stop Camera' : 'Start Camera'}
             </button>
-
 
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-slate-400" />
@@ -222,89 +312,143 @@ export default function ScannerPanel() {
                 value={state.selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="input max-w-[180px]"
-                disabled={!canScan}
+                disabled={!canScan || processing}
               />
             </div>
           </div>
         </div>
       </div>
 
-
       <div className="space-y-4 p-5">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_auto_auto]">
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-            placeholder="Scan barcode or enter punch code"
-            className="input"
-            disabled={!canScan}
-          />
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_420px]">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_auto_auto]">
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                placeholder="Scan barcode or enter punch code"
+                className="input"
+                disabled={!canScan || processing}
+              />
 
+              <button className="btn-secondary" onClick={handlePreview} disabled={!canScan || processing} type="button">
+                <SearchCheck className="h-4 w-4" />
+                Check
+              </button>
 
-          <button className="btn-secondary" onClick={handlePreview} disabled={!canScan} type="button">
-            <SearchCheck className="h-4 w-4" />
-            Check
-          </button>
+              <button className="btn-primary" onClick={() => handleSubmit()} disabled={!canScan || processing} type="button">
+                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+                {processing ? 'Processing...' : 'Process Entry'}
+              </button>
 
+              <button
+                className={`btn-secondary ${canOverride ? 'border-amber-200 bg-amber-50 text-amber-700' : 'opacity-60'}`}
+                onClick={handleQuickOverride}
+                disabled={!canScan || !canOverride || processing}
+                type="button"
+              >
+                <ShieldAlert className="h-4 w-4" />
+                HR Override
+              </button>
+            </div>
 
-          <button className="btn-primary" onClick={() => handleSubmit()} disabled={!canScan} type="button">
-            <ScanLine className="h-4 w-4" />
-            Process Entry
-          </button>
+            <div className="rounded-none border border-slate-200 bg-white p-3">
+              <div id="hr-camera-reader" className="min-h-[240px] w-full overflow-hidden rounded-md bg-slate-950" />
+            </div>
 
+            <ScanBadge status={feedback.status} text={feedback.text} />
 
-          <button
-            className={`btn-secondary ${canOverride ? 'border-amber-200 bg-amber-50 text-amber-700' : 'opacity-60'}`}
-            onClick={handleQuickOverride}
-            disabled={!canScan || !canOverride}
-            type="button"
-          >
-            <ShieldAlert className="h-4 w-4" />
-            HR Override
-          </button>
-        </div>
+            {scanSuccess && (
+              <div className="rounded-none border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <div className="flex items-center gap-2 font-semibold">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Verified
+                </div>
+                <div className="mt-1">Scan completed and saved successfully.</div>
+              </div>
+            )}
 
+            {lastMessage?.text && lastMessage.text !== feedback.text && (
+              <ScanBadge status={lastMessage.type || 'info'} text={lastMessage.text} />
+            )}
 
-        <div className="rounded-none border border-slate-200 bg-white p-3">
-          <div id="hr-camera-reader" className="min-h-[240px] w-full overflow-hidden" />
-        </div>
+            {preview && (
+              <div className={`rounded-none border px-4 py-3 text-sm ${toneMap[preview.type] || toneMap.info}`}>
+                <div className="font-semibold">Preview check</div>
+                <div className="mt-1">{preview.text}</div>
+                {preview.canOverride && canOverride && preview.employee && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" className="btn-primary" onClick={handleQuickOverride}>
+                      <ShieldAlert className="h-4 w-4" />
+                      Save HR Override
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
+            {cameraError && (
+              <div className="rounded-none border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                {cameraError}
+              </div>
+            )}
 
-        <div className={`rounded-none border px-4 py-3 text-sm ${toneMap[lastMessage.type] || toneMap.info}`}>
-          <div className="font-semibold capitalize">{lastMessage.type || 'info'}</div>
-          <div className="mt-1">{lastMessage.text || 'System is ready.'}</div>
-        </div>
-
-
-        {preview && (
-          <div className={`rounded-none border px-4 py-3 text-sm ${toneMap[preview.type] || toneMap.info}`}>
-            <div className="font-semibold">Preview check</div>
-            <div className="mt-1">{preview.text}</div>
-            {preview.canOverride && canOverride && preview.employee && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" className="btn-primary" onClick={handleQuickOverride}>
-                  <ShieldAlert className="h-4 w-4" />
-                  Save HR Override
-                </button>
+            {!canScan && (
+              <div className="rounded-none border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                Hall capacity is full. Scan and manual entry are disabled.
               </div>
             )}
           </div>
-        )}
 
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <Users className="h-4 w-4 text-slate-500" />
+                    Hall Status
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">Live occupancy and saturation state</div>
+                </div>
+                <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  {activeHalls.length} alert{activeHalls.length === 1 ? '' : 's'}
+                </div>
+              </div>
 
-        {cameraError && (
-          <div className="rounded-none border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-            {cameraError}
+              <div className="mt-4 space-y-3 max-h-[520px] overflow-auto pr-1">
+                {halls.length ? (
+                  halls.map((hall) => <HallStatusCard key={hall.id || hall.name} hall={hall} />)
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                    No hall status data available.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <Activity className="h-4 w-4 text-slate-500" />
+                Quick Summary
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+                <div className="rounded-lg bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Total Halls</div>
+                  <div className="mt-1 font-semibold text-slate-900">{halls.length}</div>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Full</div>
+                  <div className="mt-1 font-semibold text-rose-600">{halls.filter((h) => h.status === 'full').length}</div>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Filling</div>
+                  <div className="mt-1 font-semibold text-amber-600">{halls.filter((h) => h.status === 'filling').length}</div>
+                </div>
+              </div>
+            </div>
           </div>
-        )}
-
-
-        {!canScan && (
-          <div className="rounded-none border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-            Hall capacity is full. Scan and manual entry are disabled.
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
