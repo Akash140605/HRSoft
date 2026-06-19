@@ -31,18 +31,13 @@ const getShiftMeta = (shiftCode) => SHIFT_OPTIONS.find((s) => s.code === shiftCo
 const isTimeInShift = (timeHHMM, shiftCode) => {
   const shift = getShiftMeta(shiftCode);
   if (!shift) return true;
-
   const [h, m] = String(timeHHMM).split(':').map(Number);
   const current = h * 60 + m;
   const [sh, sm] = shift.start.split(':').map(Number);
   const [eh, em] = shift.end.split(':').map(Number);
   const start = sh * 60 + sm;
   const end = eh * 60 + em;
-
-  if (shift.code === 'C' || shift.code === 'BB') {
-    return current >= start || current < end;
-  }
-
+  if (shift.code === 'C' || shift.code === 'BB') return current >= start || current < end;
   return current >= start && current < end;
 };
 
@@ -88,7 +83,6 @@ export function HRProvider({ children }) {
 
   useEffect(() => {
     let active = true;
-
     const bootstrap = async () => {
       try {
         const [empRes, hallRes, settingsRes, attRes, logsRes] = await Promise.all([
@@ -127,7 +121,6 @@ export function HRProvider({ children }) {
 
   useEffect(() => {
     let active = true;
-
     const loadAttendanceForDate = async () => {
       try {
         const res = await api.get(`/attendance?date=${state.selectedDate}`);
@@ -338,16 +331,27 @@ export function HRProvider({ children }) {
   };
 
   const checkEligibility = (code) => {
-    const employee = state.employees.find((item) => String(item.code).trim() === String(code).trim());
+    const codeKey = String(code).trim();
+    const employee = state.employees.find((item) => String(item.code).trim() === codeKey);
     const todayKey = state.selectedDate;
 
-    if (!employee) return { ok: false, type: 'error', canOverride: false, text: 'Employee code roster me nahi mila.' };
+    if (!employee) {
+      return { ok: false, type: 'error', canOverride: false, duplicate: false, text: 'Employee code roster me nahi mila.' };
+    }
 
     const alreadyToday = state.entries.some(
       (item) => String(item.code).trim() === String(employee.code).trim() && getDateKey(item.date) === todayKey
     );
+
     if (alreadyToday) {
-      return { ok: false, type: 'warn', canOverride: false, text: 'Is employee ka is date par punch already ho chuka hai.' };
+      return {
+        ok: false,
+        type: 'warn',
+        canOverride: false,
+        duplicate: true,
+        employee,
+        text: 'Already scanned / duplicate entry.'
+      };
     }
 
     const now = new Date();
@@ -359,6 +363,7 @@ export function HRProvider({ children }) {
         ok: false,
         type: 'warn',
         canOverride,
+        duplicate: false,
         employee,
         text: `${employee.name} ka shift ${assignedShift.label} hai. Abhi punch time us shift me nahi aata.`
       };
@@ -369,6 +374,7 @@ export function HRProvider({ children }) {
         ok: false,
         type: 'warn',
         canOverride,
+        duplicate: false,
         employee,
         text: `Aaj ${employee.name} ka week off hai. Punch allow nahi hai.`
       };
@@ -381,6 +387,7 @@ export function HRProvider({ children }) {
       ok: true,
       type: 'success',
       canOverride: false,
+      duplicate: false,
       employee,
       hall,
       text: `${employee.name} eligible hai. Shift: ${assignedShift?.label || employee.shift}. Next hall: ${hall?.name || 'N/A'}`
@@ -390,6 +397,7 @@ export function HRProvider({ children }) {
   const processEntry = async (code) => {
     const result = checkEligibility(code);
     setLastMessage({ type: result.type, text: result.text });
+
     if (!result.ok) return result;
 
     const now = new Date();
