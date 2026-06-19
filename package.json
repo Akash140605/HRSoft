@@ -15,6 +15,7 @@
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^0.525.0",
     "qr-scanner": "^1.4.2",
+    "quagga": "^0.12.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "tailwindcss": "^4.3.1",

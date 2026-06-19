@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import QrScanner from 'qr-scanner';
+import Quagga from 'quagga';
 import {
   CalendarDays,
   ScanBarcode,
@@ -17,9 +17,6 @@ import {
   Smartphone
 } from 'lucide-react';
 import { useHR } from '../context/HRContext';
-
-// worker path (public folder me file rakho)
-QrScanner.WORKER_PATH = '/qr-scanner-worker.min.js';
 
 function Toast({ toast, onClose }) {
   useEffect(() => {
@@ -76,8 +73,7 @@ export default function ScannerPanel() {
   const codeInputRef = useRef(null);
   const successBeepRef = useRef(null);
   const errorBeepRef = useRef(null);
-  const videoRef = useRef(null);
-  const scannerRef = useRef(null);
+  const videoContainerRef = useRef(null);
   const lastScanTimeRef = useRef(0);
 
   const empResult = useMemo(
@@ -198,49 +194,70 @@ export default function ScannerPanel() {
     }
   };
 
-  const startCamera = async () => {
-    if (scannerRef.current || !videoRef.current) {
+  // Start / stop Quagga (1D barcodes)
+  const startCamera = () => {
+    if (cameraOn || !videoContainerRef.current) {
       setCameraOn(true);
       return;
     }
 
-    try {
-      const scanner = new QrScanner(
-        videoRef.current,
-        (result) => {
-          const text = result?.data || result;
-          handleScannedCode(text);
+    Quagga.init(
+      {
+        inputStream: {
+          type: 'LiveStream',
+          target: videoContainerRef.current,
+          constraints: {
+            facingMode: 'environment'
+          },
+          area: {
+            // center crop rectangle for better accuracy
+            top: '20%',
+            right: '10%',
+            left: '10%',
+            bottom: '20%'
+          }
         },
-        {
-          highlightScanRegion: true,
-          highlightCodeOutline: true,
-          returnDetailedScanResult: true
+        locator: {
+          patchSize: 'medium',
+          halfSample: true
+        },
+        decoder: {
+          // jo formats tum use karte ho unko yahan rakho
+          readers: ['code_128_reader', 'ean_reader', 'ean_8_reader', 'code_39_reader']
+        },
+        locate: true
+      },
+      (err) => {
+        if (err) {
+          console.log(err);
+          pushToast('error', 'Camera start nahi ho paaya.');
+          return;
         }
-      );
-      scannerRef.current = scanner;
-      await scanner.start();
-      setCameraOn(true);
-    } catch (err) {
-      console.error('QR Scanner Error:', err);
-      pushToast('error', 'Camera start nahi ho paaya.');
-    }
+        Quagga.start();
+        setCameraOn(true);
+      }
+    );
+
+    Quagga.onDetected((result) => {
+      const code = result?.codeResult?.code;
+      if (code) handleScannedCode(code);
+    });
   };
 
-  const stopCamera = async () => {
+  const stopCamera = () => {
     try {
-      await scannerRef.current?.stop();
-      scannerRef.current?.destroy();
+      Quagga.stop();
+      Quagga.offDetected();
     } catch {}
-    scannerRef.current = null;
     setCameraOn(false);
   };
 
   useEffect(() => {
     return () => {
-      if (scannerRef.current) {
-        scannerRef.current.stop().then(() => scannerRef.current?.destroy()).catch(() => {});
-        scannerRef.current = null;
-      }
+      try {
+        Quagga.stop();
+        Quagga.offDetected();
+      } catch {}
     };
   }, []);
 
@@ -385,13 +402,13 @@ export default function ScannerPanel() {
             </div>
 
             <div className="mt-3 rounded-lg border border-slate-200 bg-black/90 p-2">
-              <video
-                ref={videoRef}
-                autoPlay
-                muted
-                playsInline
-                className="h-64 w-full rounded border border-slate-700 object-cover"
-              />
+              <div
+                ref={videoContainerRef}
+                className="relative h-64 w-full overflow-hidden rounded border border-slate-700"
+              >
+                {/* Quagga internally video inject karega */}
+                <div className="pointer-events-none absolute inset-[20%_10%] border-2 border-emerald-400/70" />
+              </div>
             </div>
 
             <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
