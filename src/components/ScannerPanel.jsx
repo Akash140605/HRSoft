@@ -17,24 +17,23 @@ const statusMeta = {
 };
 
 function ScanBadge({ status, text }) {
-  const icon =
-    status === 'success' ? <CheckCircle2 className="h-4 w-4" /> :
-    status === 'error' ? <XCircle className="h-4 w-4" /> :
-    status === 'warn' ? <AlertTriangle className="h-4 w-4" /> : null;
-
+  const icon = status === 'success' ? <CheckCircle2 className="h-4 w-4" /> : status === 'error' ? <XCircle className="h-4 w-4" /> : status === 'warn' ? <AlertTriangle className="h-4 w-4" /> : null;
   return (
     <div className={`rounded-none border px-4 py-3 text-sm ${toneMap[status] || toneMap.info}`}>
-      <div className="flex items-center gap-2 font-semibold capitalize">
-        {icon}
-        {status || 'info'}
-      </div>
+      <div className="flex items-center gap-2 font-semibold capitalize">{icon}{status || 'info'}</div>
       <div className="mt-1">{text || 'System is ready.'}</div>
     </div>
   );
 }
 
 function HallStatusCard({ hall }) {
-  const meta = statusMeta[hall.status] || statusMeta.ok;
+  const count = Number(hall?.count ?? 0);
+  const capacity = Number(hall?.capacity ?? 0);
+  const safeCount = Number.isFinite(count) && count >= 0 ? count : 0;
+  const safeCapacity = Number.isFinite(capacity) && capacity > 0 ? capacity : 0;
+  const occupancy = safeCapacity > 0 ? Math.round((safeCount / safeCapacity) * 100) : 0;
+  const status = safeCapacity === 0 ? 'ok' : occupancy >= 100 ? 'full' : occupancy >= 75 ? 'filling' : 'ok';
+  const meta = statusMeta[status] || statusMeta.ok;
   const Icon = meta.icon;
 
   return (
@@ -43,11 +42,10 @@ function HallStatusCard({ hall }) {
         <div>
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
             <Factory className="h-4 w-4 text-slate-500" />
-            {hall.name}
+            {hall?.name || 'Unknown Hall'}
           </div>
-          <div className="mt-1 text-xs text-slate-500">{hall.location || 'Production floor'}</div>
+          <div className="mt-1 text-xs text-slate-500">{hall?.location || 'Production floor'}</div>
         </div>
-
         <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.cls}`}>
           <Icon className="h-3.5 w-3.5" />
           {meta.label}
@@ -57,20 +55,18 @@ function HallStatusCard({ hall }) {
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-lg bg-slate-50 p-3">
           <div className="text-xs text-slate-500">Capacity</div>
-          <div className="mt-1 font-semibold text-slate-900">{hall.count}/{hall.capacity}</div>
+          <div className="mt-1 font-semibold text-slate-900">{safeCount}/{safeCapacity}</div>
         </div>
         <div className="rounded-lg bg-slate-50 p-3">
           <div className="text-xs text-slate-500">Occupancy</div>
-          <div className="mt-1 font-semibold text-slate-900">{Math.round((hall.count / hall.capacity) * 100)}%</div>
+          <div className="mt-1 font-semibold text-slate-900">{occupancy}%</div>
         </div>
       </div>
 
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
         <div
-          className={`h-full rounded-full ${
-            hall.status === 'full' ? 'bg-rose-500' : hall.status === 'filling' ? 'bg-amber-500' : 'bg-emerald-500'
-          }`}
-          style={{ width: `${Math.min(100, (hall.count / hall.capacity) * 100)}%` }}
+          className={`h-full rounded-full ${status === 'full' ? 'bg-rose-500' : status === 'filling' ? 'bg-amber-500' : 'bg-emerald-500'}`}
+          style={{ width: `${Math.min(100, occupancy)}%` }}
         />
       </div>
     </div>
@@ -95,8 +91,10 @@ export default function ScannerPanel() {
   const resumeTimerRef = useRef(null);
 
   const canScan = useMemo(() => !totals.locked, [totals.locked]);
-  const halls = state?.halls || [];
-  const activeHalls = halls.filter((h) => h.status === 'full' || h.status === 'filling');
+  const halls = Array.isArray(state?.halls) ? state.halls : [];
+  const fullHalls = halls.filter((h) => h?.status === 'full');
+  const fillingHalls = halls.filter((h) => h?.status === 'filling');
+  const activeHalls = [...fullHalls, ...fillingHalls];
 
   const beep = (type = 'success') => {
     try {
@@ -120,21 +118,14 @@ export default function ScannerPanel() {
   const stopCamera = async () => {
     const scanner = scannerRef.current;
     scannerRef.current = null;
-
     if (resumeTimerRef.current) {
       clearTimeout(resumeTimerRef.current);
       resumeTimerRef.current = null;
     }
-
     setCameraMode(false);
-
     if (scanner) {
-      try {
-        await scanner.stop();
-      } catch {}
-      try {
-        await scanner.clear();
-      } catch {}
+      try { await scanner.stop(); } catch {}
+      try { await scanner.clear(); } catch {}
     }
   };
 
@@ -148,16 +139,13 @@ export default function ScannerPanel() {
   const handleSubmit = async (value = code, source = 'manual') => {
     const trimmed = String(value).trim();
     if (!trimmed || isSubmittingRef.current) return;
-
     isSubmittingRef.current = true;
     setProcessing(true);
     setScanSuccess(false);
-
     try {
       const result = processEntry(trimmed);
       setPreview(null);
       setCode('');
-
       if (result?.ok) {
         beep('success');
         setScanSuccess(true);
@@ -177,16 +165,12 @@ export default function ScannerPanel() {
   const handleQuickOverride = () => {
     const value = code.trim();
     if (!value) return;
-
     const result = checkEligibility(value);
     if (result?.ok) return;
-
     const employee = result?.employee;
     if (!employee) return;
-
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
     const ok = overrideEntry({
       code: employee.code,
       name: employee.name,
@@ -197,7 +181,6 @@ export default function ScannerPanel() {
       hallName: 'HR Override',
       overriddenBy: 'HR'
     });
-
     if (ok) {
       setCode('');
       setPreview(null);
@@ -219,46 +202,32 @@ export default function ScannerPanel() {
 
   useEffect(() => {
     let mounted = true;
-
     const startCamera = async () => {
       if (!cameraMode || !canScan) return;
       setCameraError('');
-
       try {
         const scanner = new Html5Qrcode('hr-camera-reader');
         scannerRef.current = scanner;
-
         await scanner.start(
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 260, height: 130 }, continuous: true },
           async (decodedText) => {
             const scanned = String(decodedText).trim();
             if (!scanned || processing || isSubmittingRef.current) return;
-
             const now = Date.now();
             if (lastScanRef.current === scanned && now - lastScanTimeRef.current < 1200) return;
-
             lastScanRef.current = scanned;
             lastScanTimeRef.current = now;
-
             showFeedback('warn', `Scan detected: ${scanned}`);
-
-            try {
-              await scanner.pause(true);
-            } catch {}
-
+            try { await scanner.pause(true); } catch {}
             setCode(scanned);
-
             if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
             resumeTimerRef.current = setTimeout(() => {
-              if (scannerRef.current && cameraMode) {
-                scannerRef.current.resume().catch(() => {});
-              }
+              if (scannerRef.current && cameraMode) scannerRef.current.resume().catch(() => {});
             }, 600);
           },
           () => {}
         );
-
         if (mounted) showFeedback('info', 'Camera started. Point at barcode to scan.');
       } catch (err) {
         if (mounted) {
@@ -267,21 +236,15 @@ export default function ScannerPanel() {
         }
       }
     };
-
     startCamera();
-
     return () => {
       mounted = false;
       const scanner = scannerRef.current;
       scannerRef.current = null;
       lastScanRef.current = '';
       lastScanTimeRef.current = 0;
-
       if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
-
-      if (scanner) {
-        scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
-      }
+      if (scanner) scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
     };
   }, [cameraMode, canScan]);
 
@@ -293,18 +256,11 @@ export default function ScannerPanel() {
             <h2 className="text-base font-semibold text-slate-900">Instant Entry Scanner</h2>
             <p className="mt-1 text-sm text-slate-500">Select date first, then scan or enter employee code.</p>
           </div>
-
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className={`btn-secondary ${cameraMode ? 'border-brand-600 bg-brand-50 text-brand-700' : ''}`}
-              onClick={() => setCameraMode((prev) => !prev)}
-              disabled={!canScan || processing}
-            >
+            <button type="button" className={`btn-secondary ${cameraMode ? 'border-brand-600 bg-brand-50 text-brand-700' : ''}`} onClick={() => setCameraMode((prev) => !prev)} disabled={!canScan || processing}>
               <Camera className="h-4 w-4" />
               {cameraMode ? 'Stop Camera' : 'Start Camera'}
             </button>
-
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-slate-400" />
               <input
@@ -331,17 +287,14 @@ export default function ScannerPanel() {
                 className="input"
                 disabled={!canScan || processing}
               />
-
               <button className="btn-secondary" onClick={handlePreview} disabled={!canScan || processing} type="button">
                 <SearchCheck className="h-4 w-4" />
                 Check
               </button>
-
               <button className="btn-primary" onClick={() => handleSubmit()} disabled={!canScan || processing} type="button">
                 {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
                 {processing ? 'Processing...' : 'Process Entry'}
               </button>
-
               <button
                 className={`btn-secondary ${canOverride ? 'border-amber-200 bg-amber-50 text-amber-700' : 'opacity-60'}`}
                 onClick={handleQuickOverride}
@@ -367,10 +320,6 @@ export default function ScannerPanel() {
                 </div>
                 <div className="mt-1">Scan completed and saved successfully.</div>
               </div>
-            )}
-
-            {lastMessage?.text && lastMessage.text !== feedback.text && (
-              <ScanBadge status={lastMessage.type || 'info'} text={lastMessage.text} />
             )}
 
             {preview && (
@@ -418,7 +367,7 @@ export default function ScannerPanel() {
 
               <div className="mt-4 space-y-3 max-h-[520px] overflow-auto pr-1">
                 {halls.length ? (
-                  halls.map((hall) => <HallStatusCard key={hall.id || hall.name} hall={hall} />)
+                  halls.map((hall) => <HallStatusCard key={hall?.id || hall?.name} hall={hall} />)
                 ) : (
                   <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                     No hall status data available.
@@ -439,11 +388,11 @@ export default function ScannerPanel() {
                 </div>
                 <div className="rounded-lg bg-slate-50 p-3">
                   <div className="text-xs text-slate-500">Full</div>
-                  <div className="mt-1 font-semibold text-rose-600">{halls.filter((h) => h.status === 'full').length}</div>
+                  <div className="mt-1 font-semibold text-rose-600">{fullHalls.length}</div>
                 </div>
                 <div className="rounded-lg bg-slate-50 p-3">
                   <div className="text-xs text-slate-500">Filling</div>
-                  <div className="mt-1 font-semibold text-amber-600">{halls.filter((h) => h.status === 'filling').length}</div>
+                  <div className="mt-1 font-semibold text-amber-600">{fillingHalls.length}</div>
                 </div>
               </div>
             </div>
