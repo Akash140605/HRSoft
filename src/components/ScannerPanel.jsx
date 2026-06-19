@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import QrScanner from 'qr-scanner';
 import {
   CalendarDays,
   ScanBarcode,
@@ -15,8 +16,10 @@ import {
   Search,
   Smartphone
 } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useHR } from '../context/HRContext';
+
+// IMPORTANT: set worker path once (e.g. in index.js or here)
+QrScanner.WORKER_PATH = '/qr-scanner-worker.min.js';
 
 function Toast({ toast, onClose }) {
   useEffect(() => {
@@ -45,70 +48,6 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function MobileScanner({ onResult, onClose }) {
-  const containerId = 'mobile-scanner-container';
-
-  useEffect(() => {
-    let scanner;
-
-    async function start() {
-      try {
-        scanner = new Html5QrcodeScanner(
-          containerId,
-          {
-            fps: 10,
-            qrbox: 250,
-            // disable file upload tab (kabhi kabhi white screen issue deta)
-            disableFlip: false
-          },
-          false
-        );
-
-        scanner.render(
-          (decodedText) => {
-            onResult(decodedText);
-            scanner.clear().catch(() => {});
-            onClose();
-          },
-          (error) => {
-            // debug ke liye
-            console.log('Scan error:', error);
-          }
-        );
-      } catch (err) {
-        console.log('Scanner init error:', err);
-      }
-    }
-
-    // thoda delay, taaki modal render ho jaye
-    const t = setTimeout(start, 300);
-
-    return () => {
-      clearTimeout(t);
-      if (scanner) {
-        scanner.clear().catch(() => {});
-      }
-    };
-  }, [onClose, onResult]);
-
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-sm rounded-xl bg-white p-4 shadow-xl">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="font-semibold text-slate-900">Mobile Scanner</div>
-          <button className="btn-secondary px-3 py-1 text-xs" type="button" onClick={onClose}>
-            Close
-          </button>
-        </div>
-        <div id={containerId} className="h-[320px]" />
-        <p className="mt-2 text-xs text-slate-500">
-          Allow camera permission and point scanner to barcode / QR.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export default function ScannerPanel() {
   const {
     state,
@@ -131,12 +70,15 @@ export default function ScannerPanel() {
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [showHistory, setShowHistory] = useState(false);
-  const [showMobileScanner, setShowMobileScanner] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
 
   const canScan = !totals.locked;
   const codeInputRef = useRef(null);
   const successBeepRef = useRef(null);
   const errorBeepRef = useRef(null);
+  const videoRef = useRef(null);
+  const scannerRef = useRef(null);
+  const lastScanTimeRef = useRef(0);
 
   const empResult = useMemo(
     () => state.employees.find((e) => String(e.code).trim() === String(code).trim()),
@@ -186,7 +128,7 @@ export default function ScannerPanel() {
     focusCode();
   };
 
-  // core process; ab value parameter le raha hai takki scan se direct call ho sake
+  // core process; scanner ya manual dono yahi use karenge
   const onProcess = async (value) => {
     const finalCode = String(value ?? code).trim();
     if (!finalCode) {
@@ -202,7 +144,7 @@ export default function ScannerPanel() {
     const res = await processEntry(finalCode);
     pushToast(res.ok ? 'success' : res.type || 'error', res.text || 'Done');
 
-    // sirf week-off ke special HR shortcut ke liye
+    // sirf week-off ke liye HR shortcut
     if (!res.ok && res.weekOff && state.currentRole === 'HR') {
       const ok = window.confirm('Week off hai. HR override karna hai?');
       if (ok) {
@@ -222,15 +164,28 @@ export default function ScannerPanel() {
     setBusy(false);
   };
 
-  // scanner / mobile dono yahan aayenge
+  // scanner + manual Enter dono ye use karenge
   const handleScannedCode = async (val) => {
+    const now = Date.now();
+    // 2 second ka gap har scan ke beech
+    if (now - lastScanTimeRef.current < 2000) return;
+    lastScanTimeRef.current = now;
+
     const value = String(val || '').trim();
     if (!value) return;
+
     setCode(value);
     await onProcess(value);
   };
 
-  // HR move/override – yahi out-of-shift / week-off ko allow karega
+  const handleInputKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleScannedCode(code);
+    }
+  };
+
+  // HR move / override
   const onMove = async () => {
     if (!code.trim() || !selectedHall || !reason.trim())
       return pushToast('error', 'Code, hall, reason sab required hain.');
@@ -248,16 +203,53 @@ export default function ScannerPanel() {
     }
   };
 
-  const handleMobileScanResult = (val) => {
-    handleScannedCode(val);
-  };
+  // camera start / stop
+  const startCamera = async () => {
+    if (scannerRef.current || !videoRef.current) {
+      setCameraOn(true);
+      return;
+    }
 
-  const handleInputKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleScannedCode(code);
+    try {
+      const scanner = new QrScanner(
+        videoRef.current,
+        (result) => {
+          const text = result?.data || result;
+          handleScannedCode(text);
+        },
+        {
+          highlightScanRegion: true,
+          highlightCodeOutline: true,
+          returnDetailedScanResult: true
+        }
+      );
+      scannerRef.current = scanner;
+      await scanner.start();
+      setCameraOn(true);
+    } catch (err) {
+      console.error('QR Scanner Error:', err);
+      pushToast('error', 'Camera start nahi ho paaya.');
     }
   };
+
+  const stopCamera = async () => {
+    try {
+      await scannerRef.current?.stop();
+      scannerRef.current?.destroy();
+    } catch {}
+    scannerRef.current = null;
+    setCameraOn(false);
+  };
+
+  useEffect(() => {
+    // component unmount ya route change pe clean up
+    return () => {
+      if (scannerRef.current) {
+        scannerRef.current.stop().then(() => scannerRef.current?.destroy()).catch(() => {});
+        scannerRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div className="card overflow-hidden border border-slate-200 bg-white shadow-xl">
@@ -273,19 +265,9 @@ export default function ScannerPanel() {
             <h2 className="text-lg font-semibold">Dixon Dehradun Attendance</h2>
             <p className="text-sm text-blue-100">Blue-red demo panel with hall control</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="hidden rounded-md border border-white/40 bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20 md:inline-flex md:items-center md:gap-1"
-              onClick={() => setShowMobileScanner(true)}
-            >
-              <Smartphone className="h-4 w-4" />
-              Mobile Scan
-            </button>
-            <button type="button" className="md:hidden" onClick={() => setMenuOpen((v) => !v)}>
-              {menuOpen ? <X /> : <Menu />}
-            </button>
-          </div>
+          <button type="button" className="md:hidden" onClick={() => setMenuOpen((v) => !v)}>
+            {menuOpen ? <X /> : <Menu />}
+          </button>
         </div>
       </div>
 
@@ -333,7 +315,6 @@ export default function ScannerPanel() {
             <Keyboard className="h-4 w-4" />
             {mode === 'scan' ? 'Manual Mode' : 'Scan Mode'}
           </button>
-          {/* ab Process Entry optional hai, par rehne dete hain */}
           <button className="btn-primary" type="button" onClick={() => onProcess()} disabled={busy || !canScan}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
             Process Entry
@@ -373,7 +354,7 @@ export default function ScannerPanel() {
 
         {/* main grid */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* left: scanner */}
+          {/* left: scanner + camera */}
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center gap-2 font-semibold text-slate-900">
               <ScanBarcode className="h-4 w-4 text-blue-700" />
@@ -399,15 +380,29 @@ export default function ScannerPanel() {
               <button className="btn-primary" type="button" onClick={() => onProcess()} disabled={busy || !canScan}>
                 {busy ? 'Saving...' : 'Save Entry'}
               </button>
-              <button
-                className="btn-secondary"
-                type="button"
-                onClick={() => setShowMobileScanner(true)}
-              >
-                <Smartphone className="h-4 w-4" />
-                Mobile Scan
-              </button>
+              {!cameraOn ? (
+                <button className="btn-secondary" type="button" onClick={startCamera}>
+                  <Smartphone className="h-4 w-4" />
+                  Start Camera Scan
+                </button>
+              ) : (
+                <button className="btn-danger" type="button" onClick={stopCamera}>
+                  Stop Scan
+                </button>
+              )}
             </div>
+
+            {/* live camera below */}
+            <div className="mt-3 rounded-lg border border-slate-200 bg-black/90 p-2">
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="h-64 w-full rounded border border-slate-700 object-cover"
+              />
+            </div>
+
             <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
               Current hall of employee will be used automatically if space is available.
             </div>
@@ -507,13 +502,6 @@ export default function ScannerPanel() {
           </div>
         ) : null}
       </div>
-
-      {showMobileScanner && (
-        <MobileScanner
-          onResult={handleMobileScanResult}
-          onClose={() => setShowMobileScanner(false)}
-        />
-      )}
     </div>
   );
 }
