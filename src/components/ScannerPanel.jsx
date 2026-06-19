@@ -3,12 +3,14 @@ import { Camera, ScanLine, SearchCheck, CalendarDays, ShieldAlert } from 'lucide
 import { Html5Qrcode } from 'html5-qrcode';
 import { useHR } from '../context/HRContext';
 
+
 const toneMap = {
   success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
   error: 'border-rose-200 bg-rose-50 text-rose-800',
   warn: 'border-amber-200 bg-amber-50 text-amber-800',
   info: 'border-slate-200 bg-slate-50 text-slate-700'
 };
+
 
 export default function ScannerPanel() {
   const {
@@ -22,14 +24,18 @@ export default function ScannerPanel() {
     canOverride
   } = useHR();
 
+
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState(null);
   const [cameraMode, setCameraMode] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const scannerRef = useRef(null);
   const lastScanRef = useRef('');
+  const lastScanTimeRef = useRef(0);
+
 
   const canScan = useMemo(() => !totals.locked, [totals.locked]);
+
 
   const playBeep = (type = 'success') => {
     try {
@@ -48,11 +54,13 @@ export default function ScannerPanel() {
     } catch {}
   };
 
+
   const handlePreview = () => {
     const value = code.trim();
     if (!value) return;
     setPreview(checkEligibility(value));
   };
+
 
   const handleSubmit = (value = code) => {
     const trimmed = String(value).trim();
@@ -63,6 +71,7 @@ export default function ScannerPanel() {
     if (result?.ok) playBeep('success');
     else playBeep('error');
   };
+
 
   const handleQuickOverride = () => {
     const value = code.trim();
@@ -76,6 +85,7 @@ export default function ScannerPanel() {
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
+
     const ok = overrideEntry({
       code: employee.code,
       name: employee.name,
@@ -87,6 +97,7 @@ export default function ScannerPanel() {
       overriddenBy: 'HR'
     });
 
+
     if (ok) {
       setCode('');
       setPreview(null);
@@ -96,27 +107,62 @@ export default function ScannerPanel() {
     }
   };
 
+
+  // Process entry when code is set from scanner (debounced via lastScanTimeRef)
+  useEffect(() => {
+    if (!code) return;
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    handleSubmit(trimmed);
+  }, [code]);
+
+
   useEffect(() => {
     let mounted = true;
+
 
     const startCamera = async () => {
       if (!cameraMode || !canScan) return;
       setCameraError('');
 
+
       try {
         const scanner = new Html5Qrcode('hr-camera-reader');
         scannerRef.current = scanner;
 
+
         await scanner.start(
           { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 240, height: 120 } },
+          { 
+            fps: 10, 
+            qrbox: { width: 240, height: 120 },
+            // debounce: reduce continuous scans
+            continuous: true
+          },
           async (decodedText) => {
             const scanned = String(decodedText).trim();
-            if (!scanned || lastScanRef.current === scanned) return;
+            if (!scanned) return;
+
+
+            const now = Date.now();
+            // Debounce: ignore if same scan within 300ms
+            if (lastScanRef.current === scanned && now - lastScanTimeRef.current < 300) {
+              return;
+            }
+
+
+            // Ignore if exactly same code and very recent (avoid duplicates)
+            if (lastScanRef.current === scanned && now - lastScanTimeRef.current < 500) {
+              return;
+            }
+
+
             lastScanRef.current = scanned;
+            lastScanTimeRef.current = now;
+
+
             setCode(scanned);
-            handleSubmit(scanned);
-            lastScanRef.current = '';
+            // Do NOT call handleSubmit here directly; let the code-effect handle it
           },
           () => {}
         );
@@ -128,18 +174,22 @@ export default function ScannerPanel() {
       }
     };
 
+
     startCamera();
+
 
     return () => {
       mounted = false;
       const scanner = scannerRef.current;
       scannerRef.current = null;
       lastScanRef.current = '';
+      lastScanTimeRef.current = 0;
       if (scanner) {
         scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
       }
     };
   }, [cameraMode, canScan]);
+
 
   return (
     <div className="card overflow-hidden">
@@ -152,6 +202,7 @@ export default function ScannerPanel() {
             </p>
           </div>
 
+
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -162,6 +213,7 @@ export default function ScannerPanel() {
               <Camera className="h-4 w-4" />
               {cameraMode ? 'Stop Camera' : 'Start Camera'}
             </button>
+
 
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-slate-400" />
@@ -177,6 +229,7 @@ export default function ScannerPanel() {
         </div>
       </div>
 
+
       <div className="space-y-4 p-5">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_auto_auto]">
           <input
@@ -188,15 +241,18 @@ export default function ScannerPanel() {
             disabled={!canScan}
           />
 
+
           <button className="btn-secondary" onClick={handlePreview} disabled={!canScan} type="button">
             <SearchCheck className="h-4 w-4" />
             Check
           </button>
 
+
           <button className="btn-primary" onClick={() => handleSubmit()} disabled={!canScan} type="button">
             <ScanLine className="h-4 w-4" />
             Process Entry
           </button>
+
 
           <button
             className={`btn-secondary ${canOverride ? 'border-amber-200 bg-amber-50 text-amber-700' : 'opacity-60'}`}
@@ -209,14 +265,17 @@ export default function ScannerPanel() {
           </button>
         </div>
 
+
         <div className="rounded-none border border-slate-200 bg-white p-3">
           <div id="hr-camera-reader" className="min-h-[240px] w-full overflow-hidden" />
         </div>
+
 
         <div className={`rounded-none border px-4 py-3 text-sm ${toneMap[lastMessage.type] || toneMap.info}`}>
           <div className="font-semibold capitalize">{lastMessage.type || 'info'}</div>
           <div className="mt-1">{lastMessage.text || 'System is ready.'}</div>
         </div>
+
 
         {preview && (
           <div className={`rounded-none border px-4 py-3 text-sm ${toneMap[preview.type] || toneMap.info}`}>
@@ -233,11 +292,13 @@ export default function ScannerPanel() {
           </div>
         )}
 
+
         {cameraError && (
           <div className="rounded-none border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             {cameraError}
           </div>
         )}
+
 
         {!canScan && (
           <div className="rounded-none border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
