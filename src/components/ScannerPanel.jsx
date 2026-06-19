@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, ScanLine, SearchCheck, CalendarDays, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Loader2, Factory, Users, Activity, Keyboard, ScanBarcode } from 'lucide-react';
+import { Camera, ScanLine, SearchCheck, CalendarDays, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Loader2, Factory, Users, Activity, Keyboard, ScanBarcode, Menu, X } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { useHR } from '../context/HRContext';
 
@@ -111,7 +111,7 @@ function HallStatusCard({ hall }) {
 }
 
 export default function ScannerPanel() {
-  const { state, setSelectedDate, processEntry, checkEligibility, overrideEntry, lastMessage, totals, canOverride, hallSummary, entriesForSelectedDate } = useHR();
+  const { state, setSelectedDate, processEntry, checkEligibility, overrideEntry, totals, canOverride, hallSummary, entriesForSelectedDate } = useHR();
 
   const [mode, setMode] = useState('scan');
   const [code, setCode] = useState('');
@@ -122,6 +122,7 @@ export default function ScannerPanel() {
   const [toast, setToast] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const scannerRef = useRef(null);
   const isSubmittingRef = useRef(false);
@@ -359,11 +360,25 @@ export default function ScannerPanel() {
     };
   }, [cameraMode, canScan, processing, mode]);
 
+  const navButton = (label, icon, onClick) => (
+    <button type="button" className="btn-secondary w-full justify-start" onClick={onClick}>{icon}{label}</button>
+  );
+
   return (
     <div className="card overflow-hidden">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <div className="border-b border-slate-200 bg-white px-5 py-4">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 md:hidden">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Instant Entry Scanner</h2>
+          <p className="text-xs text-slate-500">Mobile-friendly menu</p>
+        </div>
+        <button type="button" className="btn-secondary" onClick={() => setMenuOpen((v) => !v)}>
+          {menuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        </button>
+      </div>
+
+      <div className="hidden border-b border-slate-200 bg-white px-5 py-4 md:block">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Instant Entry Scanner</h2>
@@ -409,6 +424,36 @@ export default function ScannerPanel() {
           </div>
         </div>
       </div>
+
+      {menuOpen && (
+        <div className="border-b border-slate-200 bg-slate-50 p-4 md:hidden">
+          <div className="grid grid-cols-1 gap-2">
+            {navButton(`${cameraMode && mode === 'scan' ? 'Stop Scan' : 'Scan Mode'}`, <ScanBarcode className="h-4 w-4" />, () => {
+              setMode('scan');
+              setCameraMode((prev) => !prev);
+              setMenuOpen(false);
+            })}
+            {navButton(`${mode === 'manual' ? 'Manual Mode' : 'Manual Type'}`, <Keyboard className="h-4 w-4" />, () => {
+              setMode((prev) => (prev === 'manual' ? 'scan' : 'manual'));
+              setCameraMode(false);
+              setMenuOpen(false);
+            })}
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+                <CalendarDays className="h-4 w-4" />
+                Select date
+              </div>
+              <input
+                type="date"
+                value={state.selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="input w-full"
+                disabled={!canScan || processing}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4 p-5">
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_420px]">
