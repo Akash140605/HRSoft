@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, ScanLine, SearchCheck, CalendarDays, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Loader2, Factory, Users, Activity, Keyboard, ScanBarcode, Menu, X } from 'lucide-react';
+import { ScanLine, SearchCheck, CalendarDays, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Loader2, Factory, Users, Activity, Keyboard, ScanBarcode, Menu, X } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { useHR } from '../context/HRContext';
 
@@ -31,7 +31,7 @@ function Toast({ toast, onClose }) {
   const Icon = toast.type === 'success' ? CheckCircle2 : toast.type === 'error' ? XCircle : AlertTriangle;
 
   return (
-    <div className={`fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-xl px-4 py-3 shadow-lg ${cls}`}>
+    <div className={`fixed left-1/2 top-4 z-[100] -translate-x-1/2 rounded-xl px-4 py-3 shadow-lg ${cls}`}>
       <div className="flex items-center gap-2 text-sm font-semibold">
         <Icon className="h-4 w-4" />
         {toast.message}
@@ -128,7 +128,6 @@ export default function ScannerPanel() {
   const isSubmittingRef = useRef(false);
   const lastScanRef = useRef('');
   const lastScanTimeRef = useRef(0);
-  const resumeTimerRef = useRef(null);
   const handledCodesRef = useRef(new Set());
 
   const canScan = useMemo(() => !totals.locked, [totals.locked]);
@@ -144,8 +143,8 @@ export default function ScannerPanel() {
 
   const beep = (type = 'success') => {
     try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioContextClass();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
@@ -165,10 +164,6 @@ export default function ScannerPanel() {
   const stopCamera = async () => {
     const scanner = scannerRef.current;
     scannerRef.current = null;
-    if (resumeTimerRef.current) {
-      clearTimeout(resumeTimerRef.current);
-      resumeTimerRef.current = null;
-    }
     setCameraMode(false);
     if (scanner) {
       try { await scanner.stop(); } catch {}
@@ -224,7 +219,9 @@ export default function ScannerPanel() {
           if (scanner) {
             try { await scanner.pause(true); } catch {}
           }
-          setTimeout(() => { stopCamera(); }, 450);
+          setTimeout(() => {
+            stopCamera();
+          }, 550);
         }
       } else {
         beep('error');
@@ -320,9 +317,6 @@ export default function ScannerPanel() {
               pushToast('warn', 'Already scanned / duplicate entry.');
               setScanSuccess(false);
               try { await scanner.pause(true); } catch {}
-              setTimeout(() => {
-                if (scannerRef.current && cameraMode) scannerRef.current.resume().catch(() => {});
-              }, 700);
               return;
             }
 
@@ -355,13 +349,15 @@ export default function ScannerPanel() {
       scannerRef.current = null;
       lastScanRef.current = '';
       lastScanTimeRef.current = 0;
-      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
       if (scanner) scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}));
     };
   }, [cameraMode, canScan, processing, mode]);
 
   const navButton = (label, icon, onClick) => (
-    <button type="button" className="btn-secondary w-full justify-start" onClick={onClick}>{icon}{label}</button>
+    <button type="button" className="btn-secondary w-full justify-start" onClick={onClick}>
+      {icon}
+      {label}
+    </button>
   );
 
   return (
