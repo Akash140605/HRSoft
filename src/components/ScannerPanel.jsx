@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import Quagga from 'quagga';
+import QrScanner from 'qr-scanner';
 import {
   CalendarDays,
   ScanBarcode,
@@ -36,7 +36,7 @@ function Toast({ toast, onClose }) {
     toast.type === 'success' ? CheckCircle2 : toast.type === 'error' ? XCircle : AlertTriangle;
 
   return (
-    <div className={`fixed left-1/2 top-4 z-[100] -translate-x-1/2 rounded-xl px-4 py-3 shadow-lg ${cls}`}>
+    <div className={`fixed left-1/2 top-4 z-[100] -translate-x-1/2 border-2 rounded px-4 py-3 shadow-lg ${cls}`}>
       <div className="flex items-center gap-2 text-sm font-semibold">
         <Icon className="h-4 w-4" />
         {toast.message}
@@ -45,10 +45,53 @@ function Toast({ toast, onClose }) {
   );
 }
 
+function MobileScanner({ onResult, onClose }) {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    let scanner;
+    const startScanner = async () => {
+      try {
+        scanner = new QrScanner(videoRef.current, (result) => {
+          const text = result?.data || result;
+          onResult(text);
+          scanner.stop();
+          onClose();
+        });
+        await scanner.start();
+      } catch (err) {
+        console.error('QR Scanner Error:', err);
+      }
+    };
+    startScanner();
+    return () => {
+      scanner?.stop();
+      scanner?.destroy();
+    };
+  }, [onResult, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-md border-2 border-[#23205C] bg-white p-4 shadow-xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-900">QR Scanner</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="border-2 border-[#E0222A] bg-[#E0222A] px-3 py-1 text-white"
+          >
+            Close
+          </button>
+        </div>
+        <video ref={videoRef} autoPlay playsInline muted className="w-full border-2 border-slate-300" style={{ height: '350px' }} />
+      </div>
+    </div>
+  );
+}
+
 export default function ScannerPanel() {
   const {
     state,
-    loginHr,
     processEntry,
     hrOverrideEntry,
     moveEmployeeToHall,
@@ -67,14 +110,13 @@ export default function ScannerPanel() {
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [showHistory, setShowHistory] = useState(false);
-  const [cameraOn, setCameraOn] = useState(false);
+  const [showMobileScanner, setShowMobileScanner] = useState(false);
+  const [isHrLogin, setIsHrLogin] = useState(false);
 
   const canScan = !totals.locked;
   const codeInputRef = useRef(null);
   const successBeepRef = useRef(null);
   const errorBeepRef = useRef(null);
-  const videoContainerRef = useRef(null);
-  const lastScanTimeRef = useRef(0);
 
   const empResult = useMemo(
     () => state.employees.find((e) => String(e.code).trim() === String(code).trim()),
@@ -114,11 +156,6 @@ export default function ScannerPanel() {
 
   const focusCode = () => codeInputRef.current?.focus();
 
-  const onHrLogin = () => {
-    const ok = loginHr(hrLoginCode);
-    pushToast(ok ? 'success' : 'error', ok ? 'HR login successful.' : 'Invalid HR code.');
-  };
-
   const handleSuccessProcess = (ok) => {
     if (ok) setCode('');
     focusCode();
@@ -126,14 +163,8 @@ export default function ScannerPanel() {
 
   const onProcess = async (value) => {
     const finalCode = String(value ?? code).trim();
-    if (!finalCode) {
-      pushToast('error', 'Code enter karo.');
-      return;
-    }
-    if (!canScan) {
-      pushToast('error', 'Capacity locked.');
-      return;
-    }
+    if (!finalCode) return pushToast('error', 'Please enter code.');
+    if (!canScan) return pushToast('error', 'Capacity locked.');
 
     setBusy(true);
     const res = await processEntry(finalCode);
@@ -159,30 +190,26 @@ export default function ScannerPanel() {
   };
 
   const handleScannedCode = async (val) => {
-    const now = Date.now();
-    if (now - lastScanTimeRef.current < 2000) return; // 2 sec gap
-    lastScanTimeRef.current = now;
-
     const value = String(val || '').trim();
     if (!value) return;
-
     setCode(value);
     await onProcess(value);
   };
 
-  const handleInputKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleScannedCode(code);
-    }
-  };
-
-  const onMove = async () => {
-    if (!code.trim() || !selectedHall || !reason.trim())
+  const onMove = () => {
+    if (!isHrLogin) return pushToast('error', 'Pehle HR login karo.');
+    if (!code.trim() || !selectedHall || !reason.trim()) {
       return pushToast('error', 'Code, hall, reason sab required hain.');
+    }
     const res = moveEmployeeToHall({ code: code.trim(), hallId: selectedHall, reason: reason.trim() });
     pushToast(res.ok ? 'success' : 'error', res.text);
     handleSuccessProcess(res.ok);
+  };
+
+  const onHrLogin = () => {
+    const ok = String(hrLoginCode).trim() === '123456';
+    setIsHrLogin(ok);
+    pushToast(ok ? 'success' : 'error', ok ? 'HR login success.' : 'Invalid HR code.');
   };
 
   const onQuickCopy = async () => {
@@ -194,265 +221,213 @@ export default function ScannerPanel() {
     }
   };
 
-  // Start / stop Quagga (1D barcodes)
-  const startCamera = () => {
-    if (cameraOn || !videoContainerRef.current) {
-      setCameraOn(true);
-      return;
+  const handleInputKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleScannedCode(code);
     }
-
-    Quagga.init(
-      {
-        inputStream: {
-          type: 'LiveStream',
-          target: videoContainerRef.current,
-          constraints: {
-            facingMode: 'environment'
-          },
-          area: {
-            // center crop rectangle for better accuracy
-            top: '20%',
-            right: '10%',
-            left: '10%',
-            bottom: '20%'
-          }
-        },
-        locator: {
-          patchSize: 'medium',
-          halfSample: true
-        },
-        decoder: {
-          // jo formats tum use karte ho unko yahan rakho
-          readers: ['code_128_reader', 'ean_reader', 'ean_8_reader', 'code_39_reader']
-        },
-        locate: true
-      },
-      (err) => {
-        if (err) {
-          console.log(err);
-          pushToast('error', 'Camera start nahi ho paaya.');
-          return;
-        }
-        Quagga.start();
-        setCameraOn(true);
-      }
-    );
-
-    Quagga.onDetected((result) => {
-      const code = result?.codeResult?.code;
-      if (code) handleScannedCode(code);
-    });
   };
 
-  const stopCamera = () => {
-    try {
-      Quagga.stop();
-      Quagga.offDetected();
-    } catch {}
-    setCameraOn(false);
-  };
-
-  useEffect(() => {
-    return () => {
-      try {
-        Quagga.stop();
-        Quagga.offDetected();
-      } catch {}
-    };
-  }, []);
+  const showHRControls = state.currentRole === 'HR' || state.currentRole === 'ADMIN';
 
   return (
-    <div className="card overflow-hidden border border-slate-200 bg-white shadow-xl">
+    <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
       <audio ref={successBeepRef} src="/beep.wav" preload="auto" />
       <audio ref={errorBeepRef} src="/error.wav" preload="auto" />
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      {/* header */}
-      <div className="border-b border-slate-200 bg-gradient-to-r from-blue-700 to-red-600 px-5 py-4 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Dixon Dehradun Attendance</h2>
-            <p className="text-sm text-blue-100">Blue-red demo panel with hall control</p>
+      <div className="border-b border-slate-300 bg-[#23205C] px-4 py-4 text-white sm:px-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-bold sm:text-xl">Dixon Dehradun Attendance</h2>
+            <p className="truncate text-xs text-white/70 sm:text-sm">Scanner panel with hall control</p>
           </div>
-          <button type="button" className="md:hidden" onClick={() => setMenuOpen((v) => !v)}>
-            {menuOpen ? <X /> : <Menu />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="hidden border-2 border-white/30 bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20 md:inline-flex md:items-center md:gap-1"
+              onClick={() => setShowMobileScanner(true)}
+            >
+              <Smartphone className="h-4 w-4" />
+              Mobile Scan
+            </button>
+            <button type="button" className="md:hidden" onClick={() => setMenuOpen((v) => !v)}>
+              {menuOpen ? <X /> : <Menu />}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* top controls */}
-      <div className={`${menuOpen ? 'block' : 'hidden'} border-b border-slate-200 bg-slate-50 p-4 md:block`}>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+      <div className={`${menuOpen ? 'block' : 'hidden'} border-b border-slate-300 bg-slate-50 p-4 md:block sm:p-5`}>
+        {showHRControls && (
+          <div className="mb-5 border-2 border-[#E0222A] bg-[#E0222A]/5 p-4">
+            <div className="mb-3 text-sm font-bold text-[#E0222A]">HR Controls</div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <input
+                className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                placeholder="HR 6-digit code"
+                value={hrLoginCode}
+                onChange={(e) => setHrLoginCode(e.target.value)}
+              />
+              <button
+                className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98]"
+                type="button"
+                onClick={onHrLogin}
+              >
+                HR Login
+              </button>
+              <input
+                className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                placeholder="Reason / override note"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+              <select
+                className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                value={selectedHall}
+                onChange={(e) => setSelectedHall(e.target.value)}
+              >
+                {state.halls.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name} ({h.capacity})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                className="border-2 border-[#E0222A] bg-[#E0222A]/10 px-4 py-3 font-semibold text-[#E0222A] hover:bg-[#E0222A]/20"
+                type="button"
+                onClick={onMove}
+              >
+                <ShieldAlert className="mr-1 inline h-4 w-4" />
+                Move Hall
+              </button>
+              <span className={`border-2 px-4 py-3 text-sm font-semibold ${isHrLogin ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-300 bg-white text-slate-600'}`}>
+                {isHrLogin ? 'HR unlocked' : 'HR locked'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <input
-            className="input"
-            placeholder="HR 6-digit code"
-            value={hrLoginCode}
-            onChange={(e) => setHrLoginCode(e.target.value)}
-          />
-          <button className="btn-primary" type="button" onClick={onHrLogin}>
-            HR Login
-          </button>
-          <input
-            className="input"
+            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             placeholder="Select employee code"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             onKeyDown={handleInputKeyDown}
             ref={codeInputRef}
           />
-          <input
-            className="input"
-            placeholder="Reason / override note"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <select className="input" value={selectedHall} onChange={(e) => setSelectedHall(e.target.value)}>
-            {state.halls.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.name} ({h.capacity})
-              </option>
-            ))}
-          </select>
           <button
-            className="btn-secondary"
+            className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50"
             type="button"
             onClick={() => setMode(mode === 'scan' ? 'manual' : 'scan')}
           >
-            <Keyboard className="h-4 w-4" />
+            <Keyboard className="mr-1 inline h-4 w-4" />
             {mode === 'scan' ? 'Manual Mode' : 'Scan Mode'}
           </button>
-          <button className="btn-primary" type="button" onClick={() => onProcess()} disabled={busy || !canScan}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+          <button
+            className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98] disabled:opacity-50"
+            type="button"
+            onClick={() => onProcess()}
+            disabled={busy || !canScan}
+          >
+            {busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <ScanLine className="mr-1 inline h-4 w-4" />}
             Process Entry
-          </button>
-          <button className="btn-danger" type="button" onClick={onMove}>
-            <ShieldAlert className="h-4 w-4" />
-            Move Hall
           </button>
         </div>
       </div>
 
-      {/* body */}
-      <div className="p-5">
-        {/* stats */}
-        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="p-4 sm:p-5">
+        <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="border-2 border-slate-300 bg-white p-5">
             <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Role</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">{state.currentRole}</div>
+            <div className="mt-2 text-xl font-bold text-slate-900">{state.currentRole}</div>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Selected Count
-            </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">{totals.selectedCount}</div>
+          <div className="border-2 border-slate-300 bg-white p-5">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Selected Count</div>
+            <div className="mt-2 text-xl font-bold text-slate-900">{totals.selectedCount}</div>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="border-2 border-slate-300 bg-white p-5">
             <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Capacity</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">{totals.totalCapacity}</div>
+            <div className="mt-2 text-xl font-bold text-slate-900">{totals.totalCapacity}</div>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="border-2 border-slate-300 bg-white p-5">
             <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Status</div>
-            <div className={`mt-1 text-lg font-semibold ${totals.locked ? 'text-rose-600' : 'text-emerald-600'}`}>
+            <div className={`mt-2 text-xl font-bold ${totals.locked ? 'text-[#E0222A]' : 'text-emerald-600'}`}>
               {totals.locked ? 'Locked' : 'Open'}
             </div>
           </div>
         </div>
 
-        {/* main grid */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* left: scanner + camera */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center gap-2 font-semibold text-slate-900">
-              <ScanBarcode className="h-4 w-4 text-blue-700" />
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="border-2 border-slate-300 bg-white p-5">
+            <div className="flex items-center gap-2 font-bold text-slate-900">
+              <ScanBarcode className="h-4 w-4" />
               Scanner / Manual Entry
             </div>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-4 flex gap-3">
               <input
                 ref={codeInputRef}
-                className="input w-full"
+                className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
                 placeholder={mode === 'manual' ? 'Type punch code manually' : 'Scan or type code'}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 onKeyDown={handleInputKeyDown}
               />
-              <button className="btn-secondary" type="button" onClick={onQuickCopy}>
+              <button className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={onQuickCopy}>
                 <Copy className="h-4 w-4" />
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button className="btn-secondary" type="button" onClick={() => onProcess()}>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={() => onProcess()}>
                 Verify
               </button>
-              <button className="btn-primary" type="button" onClick={() => onProcess()} disabled={busy || !canScan}>
+              <button className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98] disabled:opacity-50" type="button" onClick={() => onProcess()} disabled={busy || !canScan}>
                 {busy ? 'Saving...' : 'Save Entry'}
               </button>
-              {!cameraOn ? (
-                <button className="btn-secondary" type="button" onClick={startCamera}>
-                  <Smartphone className="h-4 w-4" />
-                  Start Camera Scan
-                </button>
-              ) : (
-                <button className="btn-danger" type="button" onClick={stopCamera}>
-                  Stop Scan
-                </button>
-              )}
+              <button className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={() => setShowMobileScanner(true)}>
+                <Smartphone className="mr-1 inline h-4 w-4" />
+                Mobile Scan
+              </button>
             </div>
-
-            <div className="mt-3 rounded-lg border border-slate-200 bg-black/90 p-2">
-              <div
-                ref={videoContainerRef}
-                className="relative h-64 w-full overflow-hidden rounded border border-slate-700"
-              >
-                {/* Quagga internally video inject karega */}
-                <div className="pointer-events-none absolute inset-[20%_10%] border-2 border-emerald-400/70" />
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            <div className="mt-4 border-2 border-slate-300 bg-slate-50 px-4 py-2 text-sm text-slate-700">
               Current hall of employee will be used automatically if space is available.
             </div>
-            <div className="mt-3 text-sm text-slate-600">
-              Matched employee:{' '}
-              <span className="font-semibold text-slate-900">
-                {empResult ? `${empResult.name} (${empResult.code})` : '-'}
-              </span>
+            <div className="mt-4 text-sm text-slate-600">
+              Matched employee: <span className="font-bold text-slate-900">{empResult ? `${empResult.name} (${empResult.code})` : '-'}</span>
             </div>
           </div>
 
-          {/* right: hall load */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="border-2 border-slate-300 bg-white p-5">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 font-semibold text-slate-900">
-                <CalendarDays className="h-4 w-4 text-red-600" />
+              <div className="flex items-center gap-2 font-bold text-slate-900">
+                <CalendarDays className="h-4 w-4" />
                 Hall Load
               </div>
               <button
-                className="btn-secondary py-2 px-3"
+                className="border-2 border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
                 type="button"
                 onClick={() => setShowHistory((v) => !v)}
               >
-                <Search className="h-4 w-4" />
+                <Search className="mr-1 inline h-4 w-4" />
                 {showHistory ? 'Hide Logs' : 'Show Logs'}
               </button>
             </div>
-            <div className="mt-3 space-y-3">
+            <div className="mt-4 space-y-4">
               {hallUsage.map((h) => (
-                <div key={h.id} className="rounded-lg border border-slate-200 p-3">
+                <div key={h.id} className="border-2 border-slate-300 p-4">
                   <div className="flex items-center justify-between">
-                    <div className="font-medium text-slate-900">{h.name}</div>
-                    <div className={`text-sm font-semibold ${h.full ? 'text-red-600' : 'text-blue-700'}`}>
+                    <div className="font-bold text-slate-900">{h.name}</div>
+                    <div className={`text-sm font-bold ${h.full ? 'text-[#E0222A]' : 'text-slate-700'}`}>
                       {h.used}/{h.capacity}
                     </div>
                   </div>
-                  <div className="mt-2 h-2 rounded-full bg-slate-100">
+                  <div className="mt-3 h-2 border-2 border-slate-300 bg-white">
                     <div
-                      className={`h-2 rounded-full ${h.full ? 'bg-red-500' : 'bg-blue-600'}`}
-                      style={{
-                        width: `${Math.min(100, Math.round((h.used / Math.max(h.capacity, 1)) * 100))}%`
-                      }}
+                      className={`h-2 ${h.full ? 'bg-[#E0222A]' : 'bg-slate-700'}`}
+                      style={{ width: `${Math.min(100, Math.round((h.used / Math.max(h.capacity, 1)) * 100))}%` }}
                     />
                   </div>
                 </div>
@@ -461,13 +436,12 @@ export default function ScannerPanel() {
           </div>
         </div>
 
-        {/* recent entries */}
-        {showHistory ? (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-            <div className="mb-3 text-sm font-semibold text-slate-900">Recent Entries</div>
-            <div className="mb-3">
+        {showHistory && (showHRControls || state.currentRole === 'ADMIN') && (
+          <div className="mt-5 border-2 border-slate-300 bg-white p-5">
+            <div className="mb-4 text-sm font-bold text-slate-900">Recent Entries</div>
+            <div className="mb-4">
               <input
-                className="input w-full"
+                className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
                 placeholder="Search entries"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -477,39 +451,41 @@ export default function ScannerPanel() {
               <table className="min-w-full">
                 <thead>
                   <tr>
-                    <th className="sticky top-0 bg-slate-50">Time</th>
-                    <th className="sticky top-0 bg-slate-50">Code</th>
-                    <th className="sticky top-0 bg-slate-50">Name</th>
-                    <th className="sticky top-0 bg-slate-50">Hall</th>
-                    <th className="sticky top-0 bg-slate-50">Source</th>
-                    <th className="sticky top-0 bg-slate-50">Reason</th>
+                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Time</th>
+                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Code</th>
+                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Name</th>
+                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Hall</th>
+                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Source</th>
+                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Reason</th>
                   </tr>
                 </thead>
                 <tbody>
                   {recentRows.length ? (
                     recentRows.slice(0, 25).map((r) => (
-                      <tr key={r.id}>
-                        <td>{r.time || '-'}</td>
-                        <td>{r.code}</td>
-                        <td>{r.name}</td>
-                        <td>{r.hallName}</td>
-                        <td>{r.source}</td>
-                        <td>{r.overrideReason || '-'}</td>
+                      <tr key={r.id} className="border-b border-slate-200">
+                        <td className="px-3 py-2 text-sm text-slate-700">{r.time || '-'}</td>
+                        <td className="px-3 py-2 text-sm font-semibold text-slate-900">{r.code}</td>
+                        <td className="px-3 py-2 text-sm text-slate-900">{r.name}</td>
+                        <td className="px-3 py-2 text-sm text-slate-700">{r.hallName}</td>
+                        <td className="px-3 py-2 text-sm text-slate-700">{r.source}</td>
+                        <td className="px-3 py-2 text-sm text-slate-500">{r.overrideReason || '-'}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="6" className="py-8 text-center text-sm text-slate-500">
-                        No records found.
-                      </td>
+                      <td colSpan="6" className="py-8 text-center text-sm text-slate-500">No records found.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
           </div>
-        ) : null}
+        )}
       </div>
+
+      {showMobileScanner && (
+        <MobileScanner onResult={handleMobileScanResult} onClose={() => setShowMobileScanner(false)} />
+      )}
     </div>
   );
 }

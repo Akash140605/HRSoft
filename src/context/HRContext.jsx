@@ -1,5 +1,23 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_EMPLOYEES, DEFAULT_HALLS, DEFAULT_HR_CODES, SHIFT_OPTIONS, DAYS } from '../data/defaultData';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
+import {
+  DEFAULT_EMPLOYEES,
+  DEFAULT_HALLS,
+  SHIFT_OPTIONS,
+  DAYS
+} from '../data/defaultData';
+
+// hardcoded users for login
+const DEFAULT_USERS = [
+  { username: 'user1', password: 'user123', role: 'USER' },
+  { username: 'hr1', password: 'hr123', role: 'HR' },
+  { username: 'admin1', password: 'admin123', role: 'ADMIN' }
+];
 
 const HRContext = createContext(null);
 const STORAGE_KEY = 'demo_hr_system_v3';
@@ -38,14 +56,16 @@ const isInShift = (timeHHMM, shiftCode) => {
   const start = sh * 60 + sm;
   const end = eh * 60 + em;
 
-  // night shifts wrap
-  if (shiftCode === 'C' || shiftCode === 'BB') return current >= start || current < end;
+  if (shiftCode === 'C' || shiftCode === 'BB') {
+    return current >= start || current < end;
+  }
   return current >= start && current < end;
 };
 
 const initialState = () => ({
   selectedDate: todayISO(),
-  currentRole: 'USER',
+  currentUser: null,
+  currentRole: 'GUEST',
   currentHrCode: '',
   halls: DEFAULT_HALLS,
   employees: DEFAULT_EMPLOYEES.map(normalizeEmployee),
@@ -93,7 +113,10 @@ export function HRProvider({ children }) {
 
   const totals = useMemo(
     () => ({
-      totalCapacity: state.halls.reduce((a, h) => a + Number(h.capacity || 0), 0),
+      totalCapacity: state.halls.reduce(
+        (a, h) => a + Number(h.capacity || 0),
+        0
+      ),
       selectedCount: activeEntries.length,
       locked: hallUsage.every((h) => h.full)
     }),
@@ -101,37 +124,69 @@ export function HRProvider({ children }) {
   );
 
   const employeeMap = useMemo(
-    () => new Map(state.employees.map((e) => [String(e.code).trim(), e])),
+    () =>
+      new Map(
+        state.employees.map((e) => [String(e.code).trim(), e])
+      ),
     [state.employees]
   );
 
   const getNextHallForEmployee = (employee) => {
     const preferred = state.halls.find((h) => h.id === employee.hallId);
     if (preferred) {
-      const used = activeEntries.filter((e) => e.hallId === preferred.id).length;
+      const used = activeEntries.filter(
+        (e) => e.hallId === preferred.id
+      ).length;
       if (used < preferred.capacity) return preferred;
     }
     return (
       state.halls.find(
-        (h) => activeEntries.filter((e) => e.hallId === h.id).length < h.capacity
+        (h) =>
+          activeEntries.filter((e) => e.hallId === h.id).length <
+          h.capacity
       ) || state.halls[0]
     );
   };
 
-  const loginHr = (hrCode) => {
-    const ok = DEFAULT_HR_CODES.includes(String(hrCode).trim());
+  const login = (username, password) => {
+    const user = DEFAULT_USERS.find(
+      (u) =>
+        u.username === String(username).trim() &&
+        u.password === String(password).trim()
+    );
+    if (!user) {
+      return { ok: false, message: 'Invalid credentials' };
+    }
+
     setState((prev) => ({
       ...prev,
-      currentRole: ok ? 'HR' : 'USER',
-      currentHrCode: ok ? String(hrCode).trim() : ''
+      currentUser: { username: user.username, role: user.role },
+      currentRole: user.role,
+      currentHrCode: user.role === 'HR' || user.role === 'ADMIN'
+        ? user.username
+        : ''
     }));
-    return ok;
+
+    return { ok: true, message: 'Login successful', role: user.role };
   };
 
-  // NORMAL SCAN – sab ke liye strict (HR bhi)
+  const logout = () => {
+    setState((prev) => ({
+      ...prev,
+      currentUser: null,
+      currentRole: 'GUEST',
+      currentHrCode: ''
+    }));
+  };
+
   const processEntry = (code) => {
     const emp = employeeMap.get(String(code).trim());
-    if (!emp) return { ok: false, text: 'Employee code not found.', type: 'error' };
+    if (!emp)
+      return {
+        ok: false,
+        text: 'Employee code not found.',
+        type: 'error'
+      };
 
     const already = activeEntries.some(
       (e) => String(e.code).trim() === String(emp.code).trim()
@@ -182,7 +237,9 @@ export function HRProvider({ children }) {
       status: 'Present',
       source: 'SCAN',
       day: todayDay,
-      date: `${state.selectedDate}T${now.toTimeString().slice(0, 8)}`,
+      date: `${state.selectedDate}T${now
+        .toTimeString()
+        .slice(0, 8)}`,
       time: nowTime(),
       hrCode: '',
       hrAction: '',
@@ -197,7 +254,7 @@ export function HRProvider({ children }) {
           id: entry.id,
           type: 'SCAN',
           message: `${emp.name} -> ${hall.name}`,
-          by: '',
+          by: state.currentUser?.username || '',
           employeeCode: emp.code,
           hallId: hall.id,
           hallName: hall.name,
@@ -210,15 +267,14 @@ export function HRProvider({ children }) {
     return { ok: true, entry, text: `${emp.name} saved in ${hall.name}.` };
   };
 
-  // HR OVERRIDE – week off + out-of-shift allowed, tagged
   const hrOverrideEntry = ({ code, hallId, reason }) => {
     const emp = employeeMap.get(String(code).trim());
     const hall = state.halls.find((h) => h.id === hallId);
 
     if (!emp || !hall || !reason)
       return { ok: false, text: 'Invalid override data.', type: 'error' };
-    if (state.currentRole !== 'HR')
-      return { ok: false, text: 'HR login required.', type: 'error' };
+    if (!(state.currentRole === 'HR' || state.currentRole === 'ADMIN'))
+      return { ok: false, text: 'HR/Admin login required.', type: 'error' };
 
     const already = activeEntries.find(
       (e) => String(e.code).trim() === String(emp.code).trim()
@@ -250,9 +306,11 @@ export function HRProvider({ children }) {
       status: 'Present',
       source: 'HR_OVERRIDE',
       day: todayDay,
-      date: `${state.selectedDate}T${now.toTimeString().slice(0, 8)}`,
+      date: `${state.selectedDate}T${now
+        .toTimeString()
+        .slice(0, 8)}`,
       time: nowTime(),
-      hrCode: state.currentHrCode,
+      hrCode: state.currentUser?.username || '',
       hrAction: already ? 'MOVE_TO_OTHER_HALL' : 'FORCE_ENTRY',
       overrideReason: reasonTag
     };
@@ -266,10 +324,11 @@ export function HRProvider({ children }) {
         {
           id: entry.id,
           type: 'HR_OVERRIDE',
-          message: `${emp.name} -> ${hall.name} | ${baseReason}` +
+          message:
+            `${emp.name} -> ${hall.name} | ${baseReason}` +
             (isWeekOff ? ' | WEEK_OFF' : '') +
             (outOfShift ? ' | OUT_OF_SHIFT' : ''),
-          by: state.currentHrCode,
+          by: state.currentUser?.username || '',
           employeeCode: emp.code,
           hallId: hall.id,
           hallName: hall.name,
@@ -283,15 +342,14 @@ export function HRProvider({ children }) {
     return { ok: true, entry, text: `HR override saved for ${emp.name}.` };
   };
 
-  // HR TRANSFER – also tagged
   const moveEmployeeToHall = ({ code, hallId, reason }) => {
     const emp = employeeMap.get(String(code).trim());
     const hall = state.halls.find((h) => h.id === hallId);
 
     if (!emp || !hall || !reason)
       return { ok: false, text: 'Invalid move data.', type: 'error' };
-    if (state.currentRole !== 'HR')
-      return { ok: false, text: 'HR login required.', type: 'error' };
+    if (!(state.currentRole === 'HR' || state.currentRole === 'ADMIN'))
+      return { ok: false, text: 'HR/Admin login required.', type: 'error' };
 
     const idx = state.entries.findIndex(
       (e) =>
@@ -300,7 +358,6 @@ export function HRProvider({ children }) {
     );
 
     if (idx === -1) {
-      // aaj koi normal entry hi nahi bani – direct override
       return hrOverrideEntry({ code: emp.code, hallId, reason });
     }
 
@@ -324,7 +381,7 @@ export function HRProvider({ children }) {
       hallId: hall.id,
       hallName: hall.name,
       source: 'HR_TRANSFER',
-      hrCode: state.currentHrCode,
+      hrCode: state.currentUser?.username || '',
       hrAction: 'MOVE_TO_OTHER_HALL',
       overrideReason: reasonTag
     };
@@ -340,10 +397,11 @@ export function HRProvider({ children }) {
           {
             id: Date.now(),
             type: 'HR_TRANSFER',
-            message: `${emp.name} -> ${hall.name} | ${baseReason}` +
+            message:
+              `${emp.name} -> ${hall.name} | ${baseReason}` +
               (isWeekOff ? ' | WEEK_OFF' : '') +
               (outOfShift ? ' | OUT_OF_SHIFT' : ''),
-            by: state.currentHrCode,
+            by: state.currentUser?.username || '',
             employeeCode: emp.code,
             hallId: hall.id,
             hallName: hall.name,
@@ -355,7 +413,11 @@ export function HRProvider({ children }) {
       };
     });
 
-    return { ok: true, entry: updated, text: `${emp.name} moved to ${hall.name}.` };
+    return {
+      ok: true,
+      entry: updated,
+      text: `${emp.name} moved to ${hall.name}.`
+    };
   };
 
   const getAttendanceTracker = () => {
@@ -394,7 +456,8 @@ export function HRProvider({ children }) {
         hallUsage,
         totals,
         activeEntries,
-        loginHr,
+        login,
+        logout,
         processEntry,
         hrOverrideEntry,
         moveEmployeeToHall,

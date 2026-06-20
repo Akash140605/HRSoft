@@ -16,7 +16,11 @@ export const DEFAULT_HALLS = [
 ];
 
 export const DEFAULT_HR_CODES = ['123456', '222222', '654321'];
-
+export const DEFAULT_USERS = [
+  { username: 'user1', password: 'user123', role: 'USER' },
+  { username: 'hr1', password: 'hr123', role: 'HR' },
+  { username: 'admin1', password: 'admin123', role: 'ADMIN' }
+];
 export const DEFAULT_EMPLOYEES = [
  
 ];
