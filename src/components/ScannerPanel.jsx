@@ -387,10 +387,10 @@ export default function ScannerPanel() {
               <button className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98] disabled:opacity-50" type="button" onClick={() => onProcess()} disabled={busy || !canScan}>
                 {busy ? 'Saving...' : 'Save Entry'}
               </button>
-              <button className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={() => setShowMobileScanner(true)}>
+              {/* <button className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={() => setShowMobileScanner(true)}>
                 <Smartphone className="mr-1 inline h-4 w-4" />
                 Mobile Scan
-              </button>
+              </button> */}
             </div>
             <div className="mt-4 border-2 border-slate-300 bg-slate-50 px-4 py-2 text-sm text-slate-700">
               Current hall of employee will be used automatically if space is available.
