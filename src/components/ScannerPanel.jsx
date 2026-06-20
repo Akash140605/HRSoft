@@ -243,14 +243,14 @@ export default function ScannerPanel() {
             <p className="truncate text-xs text-white/70 sm:text-sm">Scanner panel with hall control</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            {/* <button
               type="button"
               className="hidden border-2 border-white/30 bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20 md:inline-flex md:items-center md:gap-1"
               onClick={() => setShowMobileScanner(true)}
             >
               <Smartphone className="h-4 w-4" />
               Mobile Scan
-            </button>
+            </button> */}
             <button type="button" className="md:hidden" onClick={() => setMenuOpen((v) => !v)}>
               {menuOpen ? <X /> : <Menu />}
             </button>
