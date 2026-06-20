@@ -9,10 +9,10 @@ export const SHIFT_OPTIONS = [
 ];
 
 export const DEFAULT_HALLS = [
-  { id: 'H1', name: 'Hall 1', capacity: 27, color: 'blue' },
-  { id: 'H2', name: 'Hall 2', capacity: 30, color: 'red' },
-  { id: 'H3', name: 'Hall 3', capacity: 25, color: 'blue' },
-  { id: 'H4', name: 'Hall 4', capacity: 28, color: 'red' }
+  { id: 'H1', name: 'Hall 1', capacity: 50, color: 'blue' },
+  { id: 'H2', name: 'Hall 2', capacity: 50, color: 'red' },
+  { id: 'H3', name: 'Hall 3', capacity: 50, color: 'blue' },
+  { id: 'H4', name: 'Hall 4', capacity: 50, color: 'red' }
 ];
 
 export const DEFAULT_HR_CODES = ['123456', '222222', '654321'];
