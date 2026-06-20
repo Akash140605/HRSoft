@@ -18,7 +18,7 @@ function DashboardApp() {
   const showHRLogs = state.currentRole === "ADMIN";
   const showTracker = state.currentRole === "ADMIN";
   const showEntryTable = state.currentRole === "HR" || state.currentRole === "ADMIN";
-  const showHallManager = state.currentRole === "HR" || state.currentRole === "ADMIN";
+  // const showHallManager = state.currentRole === "HR" || state.currentRole === "ADMIN";
   const isGuest = state.currentRole === "GUEST";
 
   useEffect(() => {
@@ -32,11 +32,11 @@ function DashboardApp() {
     const base = [{ key: "scanner", label: "Scanner" }];
     if (showEntryTable) base.push({ key: "entries", label: "Entries" });
     if (showRoster) base.push({ key: "roster", label: "Roster" });
-    if (showHallManager) base.push({ key: "hall", label: "Hall Manager" });
+    // if (showHallManager) base.push({ key: "hall", label: "Hall Manager" });
     if (showTracker) base.push({ key: "tracker", label: "Tracker" });
     if (showHRLogs) base.push({ key: "logs", label: "HR Logs" });
     return base;
-  }, [showEntryTable, showHallManager, showHRLogs, showRoster, showTracker]);
+  }, [showEntryTable,  showHRLogs, showRoster, showTracker]);
 
   const renderTab = () => {
     switch (activeTab) {
@@ -44,8 +44,8 @@ function DashboardApp() {
         return showEntryTable ? <EntryTable /> : <ScannerPanel />;
       case "roster":
         return showRoster ? <RosterManager /> : <ScannerPanel />;
-      case "hall":
-        return showHallManager ? <HallManager /> : <ScannerPanel />;
+      // case "hall":
+        // return showHallManager ? <HallManager /> : <ScannerPanel />;
       case "tracker":
         return showTracker ? <EmployeeTracker /> : <ScannerPanel />;
       case "logs":
