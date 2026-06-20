@@ -76,7 +76,7 @@ function DashboardApp() {
       <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200 bg-white shadow-sm">
         <div className="flex w-full items-center justify-between px-4 py-3 md:px-6 box-border">
           <img
-            src="/src/assets/logod.png"
+            src="/logod.png"
             alt="Dixon"
             className="block h-9 w-auto max-w-[55vw] object-contain sm:h-10 md:h-12"
           />

@@ -69,7 +69,7 @@ export default function LoginScreen() {
             <div className="mt-10 max-w-5xl">
               <div className="flex items-end gap-5 leading-none flex-wrap">
                 <img
-                  src="/src/assets/logod.png"
+                  src="/logod.png"
                   alt="Dixon"
                   className="block h-[clamp(5rem,16vw,13rem)] w-auto select-none object-contain"
                 />
