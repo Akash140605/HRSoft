@@ -1,23 +1,35 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Search, Loader2 } from 'lucide-react';
-import { useHR } from '../context/HRContext';
-import hrApi from '../api/hrApi';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Download, Search, Loader2 } from "lucide-react";
+import { useHR } from "../context/HRContext";
+import hrApi from "../api/hrApi";
 
 const getLogValue = (log, keys) => {
   for (const key of keys) {
     const val = log?.[key];
-    if (val !== undefined && val !== null && String(val).trim() !== '') return String(val).trim();
+    if (val !== undefined && val !== null && String(val).trim() !== "") return String(val).trim();
   }
-  return '';
+  return "";
 };
+
+const normalizeLog = (log) => ({
+  ...log,
+  at: log.at || log.date || log.createdAt || "",
+  type: getLogValue(log, ["type"]) || "",
+  message: getLogValue(log, ["message"]) || "",
+  by: getLogValue(log, ["by", "hrCode", "hr_code"]) || "",
+  employeeCode: getLogValue(log, ["employeeCode", "employee_code", "code"]) || "",
+  hallId: getLogValue(log, ["hallId", "hall_id"]) || "",
+  hallName: getLogValue(log, ["hallName", "hall_name"]) || "",
+  overrideReason: getLogValue(log, ["overrideReason", "override_reason"]) || "",
+});
 
 export default function HRLogsPanel() {
   const { state, setState } = useHR();
-  const [query, setQuery] = useState('');
-  const [hrCode, setHrCode] = useState('');
-  const [employeeCode, setEmployeeCode] = useState('');
-  const [actionType, setActionType] = useState('');
-  const [selectedHrId, setSelectedHrId] = useState('');
+  const [query, setQuery] = useState("");
+  const [hrCode, setHrCode] = useState("");
+  const [employeeCode, setEmployeeCode] = useState("");
+  const [actionType, setActionType] = useState("");
+  const [selectedHrId, setSelectedHrId] = useState("");
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -28,7 +40,7 @@ export default function HRLogsPanel() {
       if (res.success) {
         setState((prev) => ({
           ...prev,
-          logs: Array.isArray(res.data) ? res.data : [],
+          logs: Array.isArray(res.data) ? res.data.map(normalizeLog) : [],
         }));
       } else {
         setState((prev) => ({ ...prev, logs: [] }));
@@ -45,7 +57,7 @@ export default function HRLogsPanel() {
   const hrIds = useMemo(() => {
     const ids = new Set();
     (state.logs || []).forEach((log) => {
-      const id = getLogValue(log, ['by', 'hrCode', 'hr_code']);
+      const id = getLogValue(log, ["by", "hrCode", "hr_code"]);
       if (id) ids.add(id);
     });
     return Array.from(ids).sort();
@@ -55,12 +67,12 @@ export default function HRLogsPanel() {
     const q = query.trim().toLowerCase();
 
     return (state.logs || []).filter((log) => {
-      const logHr = getLogValue(log, ['by', 'hrCode', 'hr_code']);
-      const logEmp = getLogValue(log, ['employeeCode', 'employee_code', 'code']);
-      const logType = getLogValue(log, ['type']);
-      const logMsg = getLogValue(log, ['message']);
-      const logHall = getLogValue(log, ['hallName', 'hall_name']);
-      const logReason = getLogValue(log, ['overrideReason', 'override_reason']);
+      const logHr = getLogValue(log, ["by", "hrCode", "hr_code"]);
+      const logEmp = getLogValue(log, ["employeeCode", "employee_code", "code"]);
+      const logType = getLogValue(log, ["type"]);
+      const logMsg = getLogValue(log, ["message"]);
+      const logHall = getLogValue(log, ["hallName", "hall_name"]);
+      const logReason = getLogValue(log, ["overrideReason", "override_reason"]);
       const text = `${logType} ${logMsg} ${logHr} ${logEmp} ${logHall} ${logReason}`.toLowerCase();
 
       const hrOk = !hrCode || logHr === hrCode.trim();
@@ -74,27 +86,29 @@ export default function HRLogsPanel() {
   }, [actionType, employeeCode, hrCode, query, selectedHrId, state.logs]);
 
   const exportCsv = () => {
-    const headers = ['at', 'type', 'message', 'by', 'employee_code', 'hall_id', 'hall_name', 'override_reason'];
-    const csv = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? r[h.replace(/_/g, '')] ?? ''))]
-      .map((line) => line.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(','))
-      .join('\n');
+    const headers = ["at", "type", "message", "by", "employeeCode", "hallId", "hallName", "overrideReason"];
+    const csv = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? ""))]
+      .map((line) => line.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(","))
+      .join("\n");
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = 'hr-logs.csv';
+    a.download = "hr-logs.csv";
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const clearFilters = () => {
-    setQuery('');
-    setHrCode('');
-    setEmployeeCode('');
-    setActionType('');
-    setSelectedHrId('');
+    setQuery("");
+    setHrCode("");
+    setEmployeeCode("");
+    setActionType("");
+    setSelectedHrId("");
   };
+
+  const refreshLogs = () => setRefreshKey((k) => k + 1);
 
   return (
     <div className="overflow-hidden border border-slate-200 bg-white shadow-xl">
@@ -107,9 +121,12 @@ export default function HRLogsPanel() {
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button className="btn-secondary" type="button" onClick={clearFilters}>
               Clear Filters
+            </button>
+            <button className="btn-secondary" type="button" onClick={refreshLogs}>
+              Refresh
             </button>
             <button className="btn-secondary" type="button" onClick={exportCsv}>
               <Download className="h-4 w-4" />
@@ -171,7 +188,7 @@ export default function HRLogsPanel() {
         </div>
       </div>
 
-      <div className="table-wrap max-h-[520px] overflow-auto">
+      <div className="max-h-[520px] overflow-auto">
         <table className="min-w-full">
           <thead>
             <tr>
@@ -196,19 +213,19 @@ export default function HRLogsPanel() {
             ) : rows.length ? (
               rows.map((row) => (
                 <tr key={row.id}>
-                  <td>{row.at ? String(row.at).slice(0, 19).replace('T', ' ') : '-'}</td>
+                  <td>{row.at ? String(row.at).slice(0, 19).replace("T", " ") : "-"}</td>
                   <td>
                     <span className="badge border border-slate-300 bg-white text-slate-700">
-                      {getLogValue(row, ['type']) || '-'}
+                      {getLogValue(row, ["type"]) || "-"}
                     </span>
                   </td>
-                  <td>{getLogValue(row, ['message']) || '-'}</td>
+                  <td>{getLogValue(row, ["message"]) || "-"}</td>
                   <td className="font-medium text-slate-900">
-                    {getLogValue(row, ['by', 'hrCode', 'hr_code']) || (getLogValue(row, ['type']) === 'SCAN' ? 'SYSTEM' : '-')}
+                    {getLogValue(row, ["by", "hrCode", "hr_code"]) || (getLogValue(row, ["type"]) === "SCAN" ? "SYSTEM" : "-")}
                   </td>
-                  <td>{getLogValue(row, ['employeeCode', 'employee_code', 'code']) || '-'}</td>
-                  <td>{getLogValue(row, ['hallName', 'hall_name']) || '-'}</td>
-                  <td>{getLogValue(row, ['overrideReason', 'override_reason']) || '-'}</td>
+                  <td>{getLogValue(row, ["employeeCode", "employee_code", "code"]) || "-"}</td>
+                  <td>{getLogValue(row, ["hallName", "hall_name"]) || "-"}</td>
+                  <td>{getLogValue(row, ["overrideReason", "override_reason"]) || "-"}</td>
                 </tr>
               ))
             ) : (

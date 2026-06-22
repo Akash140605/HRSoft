@@ -8,9 +8,33 @@ import {
   Copy,
   Eye,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { useHR } from "../context/HRContext";
 import hrApi from "../api/hrApi";
+
+const normalizeEntry = (entry) => ({
+  ...entry,
+  id: entry.id,
+  hallId: entry.hall_id || entry.hallId || "",
+  hallName: entry.hall_name || entry.hallName || `Hall ${entry.hall_id || entry.hallId || "?"}`,
+  overrideReason: entry.override_reason || entry.overrideReason || "",
+  hrCode: entry.hr_code || entry.hrCode || "",
+  hrAction: entry.hr_action || entry.hrAction || "",
+  source: entry.source || "",
+  date: entry.date || "",
+  time: entry.time || "",
+  day: entry.day || "",
+});
+
+const toTime = (dateStr, endOfDay = false) => {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  if (endOfDay) d.setHours(23, 59, 59, 999);
+  else d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
 
 export default function EntryTable() {
   const { state, setState, moveEmployeeToHall } = useHR();
@@ -37,19 +61,7 @@ export default function EntryTable() {
       const res = await hrApi.getEntries();
       if (res.success) {
         const rawEntries = Array.isArray(res.data) ? res.data : [];
-        const mappedEntries = rawEntries.map((entry) => ({
-          ...entry,
-          id: entry.id,
-          hallId: entry.hall_id || entry.hallId || "",
-          hallName:
-            entry.hall_name ||
-            entry.hallName ||
-            `Hall ${entry.hall_id || entry.hallId || "?"}`,
-          overrideReason: entry.override_reason || entry.overrideReason || "",
-          hrCode: entry.hr_code || entry.hrCode || "",
-          hrAction: entry.hr_action || entry.hrAction || "",
-        }));
-
+        const mappedEntries = rawEntries.map(normalizeEntry);
         setState((prev) => ({
           ...prev,
           entries: mappedEntries,
@@ -66,10 +78,9 @@ export default function EntryTable() {
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const base = Array.isArray(state.entries) ? state.entries : [];
-
-    const fromTime = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : null;
-    const toTime = dateTo ? new Date(dateTo).setHours(23, 59, 59, 999) : null;
+    const base = Array.isArray(state.entries) ? state.entries.map(normalizeEntry) : [];
+    const fromTime = toTime(dateFrom, false);
+    const toTimeValue = toTime(dateTo, true);
 
     return base.filter((r) => {
       const vals = [
@@ -83,6 +94,7 @@ export default function EntryTable() {
         r.status,
         r.overrideReason,
         r.hrCode,
+        r.hrAction,
       ]
         .join(" ")
         .toLowerCase();
@@ -93,13 +105,12 @@ export default function EntryTable() {
       const shiftOk = !shiftFilter || String(r.shift || "") === shiftFilter;
 
       const reasonText = String(r.overrideReason || "").toLowerCase();
-      const reasonOk =
-        !reasonFilter || reasonText.includes(reasonFilter.trim().toLowerCase());
+      const reasonOk = !reasonFilter || reasonText.includes(reasonFilter.trim().toLowerCase());
 
-      const rowTime = r.date ? new Date(r.date).getTime() : null;
+      const rowTime = toTime(r.date, false);
       const dateOk =
         (!fromTime || (rowTime !== null && rowTime >= fromTime)) &&
-        (!toTime || (rowTime !== null && rowTime <= toTime));
+        (!toTimeValue || (rowTime !== null && rowTime <= toTimeValue));
 
       return qOk && sourceOk && hallOk && shiftOk && reasonOk && dateOk;
     });
@@ -124,9 +135,7 @@ export default function EntryTable() {
     ];
 
     const csv = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? ""))]
-      .map((line) =>
-        line.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(",")
-      )
+      .map((line) => line.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(","))
       .join("\n");
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -155,9 +164,9 @@ export default function EntryTable() {
       if (res.success) {
         setState((prev) => ({
           ...prev,
-          entries: prev.entries.filter((x) => x.id !== id),
+          entries: prev.entries.filter((x) => String(x.id) !== String(id)),
         }));
-        if (selectedRow === id) setSelectedRow(null);
+        if (String(selectedRow) === String(id)) setSelectedRow(null);
       } else {
         alert(res.error || "Delete failed");
       }
@@ -181,11 +190,9 @@ export default function EntryTable() {
       ),
     }));
 
-    for (const entry of oldScans) {
-      try {
-        await hrApi.deleteEntry(entry.id);
-      } catch {}
-    }
+    await Promise.allSettled(
+      oldScans.map((entry) => (entry.id != null ? hrApi.deleteEntry(entry.id) : Promise.resolve()))
+    );
   };
 
   const onMove = async () => {
@@ -225,6 +232,8 @@ export default function EntryTable() {
     setReasonFilter("");
   };
 
+  const refresh = () => setRefreshKey((k) => k + 1);
+
   return (
     <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
       <div className="border-b border-slate-300 bg-[#23205C] px-5 py-4">
@@ -243,6 +252,14 @@ export default function EntryTable() {
             >
               <Filter className="mr-1 inline h-4 w-4" />
               Clear Filters
+            </button>
+            <button
+              className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              onClick={refresh}
+              type="button"
+            >
+              <RefreshCw className="mr-1 inline h-4 w-4" />
+              Refresh
             </button>
             <button
               className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
@@ -315,9 +332,8 @@ export default function EntryTable() {
             <option value="A">A</option>
             <option value="B">B</option>
             <option value="C">C</option>
-             <option value="AA">AA</option>
+            <option value="AA">AA</option>
             <option value="BB">BB</option>
-         
           </select>
 
           <input
@@ -427,9 +443,7 @@ export default function EntryTable() {
               rows.map((r) => (
                 <tr
                   key={`${r.id}-${r.code}-${r.time}-${r.name}-${r.hallId}`}
-                  className={
-                    selectedRow === r.id ? "bg-slate-100" : "border-b border-slate-200"
-                  }
+                  className={String(selectedRow) === String(r.id) ? "bg-slate-100" : "border-b border-slate-200"}
                   onClick={() => setSelectedRow(r.id)}
                 >
                   <td className="px-3 py-3 text-sm text-slate-700">{String(r.date).slice(0, 10)}</td>
@@ -455,9 +469,7 @@ export default function EntryTable() {
                       {r.source}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-sm text-slate-500">
-                    {r.overrideReason || "-"}
-                  </td>
+                  <td className="px-3 py-3 text-sm text-slate-500">{r.overrideReason || "-"}</td>
                   <td className="px-3 py-3 text-sm">
                     <div className="flex gap-2">
                       <button

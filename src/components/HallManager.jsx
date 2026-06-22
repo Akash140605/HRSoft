@@ -27,6 +27,14 @@ const accentMap = {
   slate: { ring: "ring-slate-400/20", border: "border-slate-500", soft: "bg-slate-100 text-slate-700" },
 };
 
+const normalizeHall = (hall) => ({
+  ...hall,
+  id: hall.id,
+  name: hall.name || "",
+  capacity: Number(hall.capacity || 0),
+  color: hall.color || "blue",
+});
+
 export default function HallManager() {
   const { state, setState, hallUsage, SHIFT_OPTIONS, activeEntries } = useHR();
 
@@ -41,7 +49,7 @@ export default function HallManager() {
       if (res.success) {
         setState((prev) => ({
           ...prev,
-          halls: Array.isArray(res.data) ? res.data : [],
+          halls: Array.isArray(res.data) ? res.data.map(normalizeHall) : [],
         }));
       }
     } finally {
@@ -96,7 +104,10 @@ export default function HallManager() {
   }, [hallSummary, SHIFT_OPTIONS, entriesForSelectedDate]);
 
   const totalUsed = hallSummary.reduce((sum, hall) => sum + Number(hall.used || 0), 0);
-  const totalCapacity = hallSummary.reduce((sum, hall) => sum + Number(hall.effectiveCapacity || hall.capacity || 0), 0);
+  const totalCapacity = hallSummary.reduce(
+    (sum, hall) => sum + Number(hall.effectiveCapacity || hall.capacity || 0),
+    0
+  );
   const totalOccupancy = totalCapacity > 0 ? Math.round((totalUsed / totalCapacity) * 100) : 0;
 
   const handleToggle = (hallId) => {
@@ -104,6 +115,9 @@ export default function HallManager() {
   };
 
   const updateHall = async (hallId, updates) => {
+    const current = state.halls.find((h) => String(h.id) === String(hallId));
+    const prevHall = current ? { ...current } : null;
+
     setState((prev) => ({
       ...prev,
       halls: prev.halls.map((h) => (String(h.id) === String(hallId) ? { ...h, ...updates } : h)),
@@ -111,16 +125,32 @@ export default function HallManager() {
 
     setLoading(true);
     try {
-      const current = state.halls.find((h) => String(h.id) === String(hallId));
       const payload = {
         name: updates.name ?? current?.name ?? "",
-        capacity: updates.capacity ?? current?.capacity ?? 50,
+        capacity: updates.capacity ?? current?.capacity ?? 0,
         color: updates.color ?? current?.color ?? "blue",
       };
 
       const res = await hrApi.updateHall(hallId, payload);
-      if (res.success) setRefreshKey((k) => k + 1);
-      else alert(res.error || "Hall update failed");
+      if (res.success) {
+        setRefreshKey((k) => k + 1);
+      } else {
+        if (prevHall) {
+          setState((prev) => ({
+            ...prev,
+            halls: prev.halls.map((h) => (String(h.id) === String(hallId) ? prevHall : h)),
+          }));
+        }
+        alert(res.error || "Hall update failed");
+      }
+    } catch (error) {
+      if (prevHall) {
+        setState((prev) => ({
+          ...prev,
+          halls: prev.halls.map((h) => (String(h.id) === String(hallId) ? prevHall : h)),
+        }));
+      }
+      alert(error.message || "Hall update failed");
     } finally {
       setLoading(false);
     }
@@ -207,7 +237,9 @@ export default function HallManager() {
             <div key={shift.code} className="border-2 border-slate-200 bg-white p-4 shadow-sm">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{shift.label}</div>
               <div className="mt-1 text-xl font-bold text-slate-900">{shift.count}</div>
-              <div className="text-xs text-slate-500">{shift.start} - {shift.end}</div>
+              <div className="text-xs text-slate-500">
+                {shift.start} - {shift.end}
+              </div>
             </div>
           ))}
         </div>

@@ -1,10 +1,17 @@
-import React from 'react';
-import { Building2, Download, RotateCcw, ShieldCheck } from 'lucide-react';
-import { useHR } from '../context/HRContext';
-import { downloadTextFile, formatRosterCsv } from '../utils/helpers';
+import React from "react";
+import { Building2, Download, RotateCcw, ShieldCheck, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useHR } from "../context/HRContext";
+import { downloadTextFile, formatRosterCsv } from "../utils/helpers";
 
 export default function Header() {
-  const { state, resetEntries, resetSystem, totals } = useHR();
+  const { state, resetAll, totals, logout, currentUser } = useHR();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <header className="card overflow-hidden">
@@ -37,9 +44,9 @@ export default function Header() {
               className="btn-secondary"
               onClick={() =>
                 downloadTextFile(
-                  'roster-template.csv',
+                  "roster-template.csv",
                   formatRosterCsv(state.employees),
-                  'text/csv;charset=utf-8;'
+                  "text/csv;charset=utf-8;"
                 )
               }
               type="button"
@@ -48,22 +55,14 @@ export default function Header() {
               Export roster CSV
             </button>
 
-            <button className="btn-secondary" onClick={resetEntries} type="button">
+            <button className="btn-secondary" onClick={resetAll} type="button">
               <RotateCcw className="h-4 w-4" />
-              Reset today entries
+              Full reset
             </button>
 
-            <button
-              className="btn-danger"
-              onClick={() => {
-                const ok = window.confirm(
-                  'Full reset karein? Isse halls, employees, entries sab default state me chala jayega.'
-                );
-                if (ok) resetSystem();
-              }}
-              type="button"
-            >
-              Full reset
+            <button className="btn-danger" onClick={handleLogout} type="button">
+              <LogOut className="h-4 w-4" />
+              Logout
             </button>
           </div>
         </div>

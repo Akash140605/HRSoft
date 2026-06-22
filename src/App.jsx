@@ -7,14 +7,13 @@ import RosterManager from "./components/RosterManager";
 import HRLogsPanel from "./components/HRLogsPanel";
 import HallManager from "./components/HallManager";
 import LoginScreen from "./components/LoginScreen";
+import HRTrainingRoute from "./pages/HRTrainingRoute";
 import { Menu, X } from "lucide-react";
-
 
 function DashboardApp() {
   const { state, logout } = useHR();
   const [activeTab, setActiveTab] = useState("scanner");
   const [tabsOpen, setTabsOpen] = useState(false);
-
 
   const showRoster = state.currentRole === "HR" || state.currentRole === "ADMIN";
   const showHRLogs = state.currentRole === "ADMIN";
@@ -23,7 +22,6 @@ function DashboardApp() {
   const showHallManager = state.currentRole === "HR" || state.currentRole === "ADMIN";
   const isGuest = state.currentRole === "GUEST";
 
-
   useEffect(() => {
     if (isGuest) {
       setActiveTab("scanner");
@@ -31,9 +29,11 @@ function DashboardApp() {
     }
   }, [isGuest]);
 
-
   const tabs = useMemo(() => {
-    const base = [{ key: "scanner", label: "Scanner" }];
+    const base = [
+      { key: "scanner", label: "Scanner" },
+      { key: "training", label: "Training" },
+    ];
     if (showEntryTable) base.push({ key: "entries", label: "Entries" });
     if (showRoster) base.push({ key: "roster", label: "Roster" });
     if (showHallManager) base.push({ key: "hall", label: "Hall Manager" });
@@ -42,9 +42,10 @@ function DashboardApp() {
     return base;
   }, [showEntryTable, showHRLogs, showRoster, showTracker, showHallManager]);
 
-
   const renderTab = () => {
     switch (activeTab) {
+      case "training":
+        return <HRTrainingRoute />;
       case "entries":
         return showEntryTable ? <EntryTable /> : <ScannerPanel />;
       case "roster":
@@ -61,24 +62,20 @@ function DashboardApp() {
     }
   };
 
-
   const selectTab = (key) => {
     setActiveTab(key);
     setTabsOpen(false);
   };
 
-
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setTabsOpen(false);
     setActiveTab("scanner");
-    logout();
+    await logout();
   };
-
 
   if (isGuest) {
     return <LoginScreen />;
   }
-
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 overflow-x-hidden overflow-y-auto">
@@ -90,7 +87,6 @@ function DashboardApp() {
             className="block h-9 w-auto max-w-[55vw] object-contain sm:h-10 md:h-12"
           />
 
-
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -99,7 +95,6 @@ function DashboardApp() {
             >
               {tabsOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-
 
             <button
               onClick={handleLogout}
@@ -110,9 +105,10 @@ function DashboardApp() {
           </div>
         </div>
 
-
         <div
-          className={`border-t border-slate-200 bg-white px-4 md:px-6 ${tabsOpen ? "block" : "hidden"} md:block`}
+          className={`border-t border-slate-200 bg-white px-4 md:px-6 ${
+            tabsOpen ? "block" : "hidden"
+          } md:block`}
         >
           <div className="flex flex-col gap-5 py-4 md:flex-row md:flex-wrap md:items-center">
             {tabs.map((tab) => (
@@ -133,14 +129,12 @@ function DashboardApp() {
         </div>
       </header>
 
-
       <main className="w-full px-4 py-6 md:px-6 pt-24 md:pt-40">
         <div className="grid grid-cols-1 gap-6">{renderTab()}</div>
       </main>
     </div>
   );
 }
-
 
 export default function App() {
   return (
