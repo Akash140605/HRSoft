@@ -12,8 +12,10 @@ import {
 import { useHR } from "../context/HRContext";
 import hrApi from "../api/hrApi";
 
+
 export default function EntryTable() {
   const { state, setState, moveEmployeeToHall } = useHR();
+
 
   const [query, setQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -23,22 +25,35 @@ export default function EntryTable() {
   const [shiftFilter, setShiftFilter] = useState("");
   const [reasonFilter, setReasonFilter] = useState("");
 
+
   const [moveCode, setMoveCode] = useState("");
   const [moveHallId, setMoveHallId] = useState("H1");
   const [moveReason, setMoveReason] = useState("");
 
+
   const [selectedRow, setSelectedRow] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
     try {
       const res = await hrApi.getEntries();
       if (res.success) {
+        const rawEntries = Array.isArray(res.data) ? res.data : [];
+        
+        // ← FIX: snake_case → camelCase map karo
+        const mappedEntries = rawEntries.map((entry) => ({
+          ...entry,
+          hallName: entry.hall_name || entry.hallName || `Hall ${entry.hall_id || entry.hallId || '?'}`,
+          overrideReason: entry.override_reason || entry.overrideReason || "",
+          hallId: entry.hall_id || entry.hallId,
+        }));
+
         setState((prev) => ({
           ...prev,
-          entries: Array.isArray(res.data) ? res.data : [],
+          entries: mappedEntries,
         }));
       }
     } finally {
@@ -46,16 +61,20 @@ export default function EntryTable() {
     }
   }, [setState]);
 
+
   useEffect(() => {
     fetchEntries();
   }, [fetchEntries, refreshKey]);
+
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const base = Array.isArray(state.entries) ? state.entries : [];
 
+
     const fromTime = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : null;
     const toTime = dateTo ? new Date(dateTo).setHours(23, 59, 59, 999) : null;
+
 
     return base.filter((r) => {
       const vals = [
@@ -73,23 +92,28 @@ export default function EntryTable() {
         .join(" ")
         .toLowerCase();
 
+
       const qOk = !q || vals.includes(q);
       const sourceOk = !sourceFilter || String(r.source || "") === sourceFilter;
       const hallOk = !hallFilter || String(r.hallId || "") === hallFilter;
       const shiftOk = !shiftFilter || String(r.shift || "") === shiftFilter;
 
+
       const reasonText = String(r.overrideReason || "").toLowerCase();
       const reasonOk =
         !reasonFilter || reasonText.includes(reasonFilter.trim().toLowerCase());
+
 
       const rowTime = r.date ? new Date(r.date).getTime() : null;
       const dateOk =
         (!fromTime || (rowTime !== null && rowTime >= fromTime)) &&
         (!toTime || (rowTime !== null && rowTime <= toTime));
 
+
       return qOk && sourceOk && hallOk && shiftOk && reasonOk && dateOk;
     });
   }, [state.entries, hallFilter, query, reasonFilter, shiftFilter, sourceFilter, dateFrom, dateTo]);
+
 
   const exportCsv = () => {
     const headers = [
@@ -109,11 +133,13 @@ export default function EntryTable() {
       "overrideReason",
     ];
 
+
     const csv = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? ""))]
       .map((line) =>
         line.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(",")
       )
       .join("\n");
+
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -124,6 +150,7 @@ export default function EntryTable() {
     URL.revokeObjectURL(url);
   };
 
+
   const copyRow = async (r) => {
     const text = `${r.code} | ${r.name} | ${r.designation} | ${r.hallName} | ${r.source}`;
     try {
@@ -131,11 +158,13 @@ export default function EntryTable() {
     } catch {}
   };
 
+
   const onMove = async () => {
     if (!moveCode.trim() || !moveReason.trim()) {
       alert("Code aur reason required hai.");
       return;
     }
+
 
     setLoading(true);
     try {
@@ -144,6 +173,7 @@ export default function EntryTable() {
         hallId: moveHallId,
         reason: moveReason.trim(),
       });
+
 
       alert(res.text || (res.ok ? "Moved successfully" : "Failed"));
       if (res.ok) {
@@ -156,9 +186,11 @@ export default function EntryTable() {
     }
   };
 
+
   const removeEntry = async (id) => {
     const ok = window.confirm("Delete this attendance entry?");
     if (!ok) return;
+
 
     setLoading(true);
     try {
@@ -177,6 +209,7 @@ export default function EntryTable() {
     }
   };
 
+
   const clearFilters = () => {
     setQuery("");
     setDateFrom("");
@@ -186,6 +219,7 @@ export default function EntryTable() {
     setShiftFilter("");
     setReasonFilter("");
   };
+
 
   return (
     <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
@@ -218,6 +252,7 @@ export default function EntryTable() {
         </div>
       </div>
 
+
       <div className="border-b border-slate-300 bg-slate-50 p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
           <div className="relative md:col-span-2">
@@ -230,6 +265,7 @@ export default function EntryTable() {
             />
           </div>
 
+
           <input
             type="date"
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
@@ -237,12 +273,14 @@ export default function EntryTable() {
             onChange={(e) => setDateFrom(e.target.value)}
           />
 
+
           <input
             type="date"
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
           />
+
 
           <select
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
@@ -254,6 +292,7 @@ export default function EntryTable() {
             <option value="HR_OVERRIDE">HR_OVERRIDE</option>
             <option value="HR_TRANSFER">HR_TRANSFER</option>
           </select>
+
 
           <select
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
@@ -268,6 +307,7 @@ export default function EntryTable() {
             ))}
           </select>
 
+
           <select
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={shiftFilter}
@@ -280,6 +320,7 @@ export default function EntryTable() {
             <option value="GENERAL">GENERAL</option>
           </select>
 
+
           <input
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
             value={reasonFilter}
@@ -287,12 +328,14 @@ export default function EntryTable() {
             placeholder="Filter by reason"
           />
 
+
           <input
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={moveCode}
             onChange={(e) => setMoveCode(e.target.value)}
             placeholder="Employee code for transfer"
           />
+
 
           <select
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
@@ -306,12 +349,14 @@ export default function EntryTable() {
             ))}
           </select>
 
+
           <input
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
             value={moveReason}
             onChange={(e) => setMoveReason(e.target.value)}
             placeholder="Reason for hall move"
           />
+
 
           <button
             className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98] md:col-span-2 disabled:opacity-50"
@@ -328,6 +373,7 @@ export default function EntryTable() {
           </button>
         </div>
       </div>
+
 
       <div className="px-4 pt-4">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -363,6 +409,7 @@ export default function EntryTable() {
           </div>
         </div>
       </div>
+
 
       <div className="mt-4 max-h-[520px] overflow-auto">
         <table className="min-w-full">
@@ -403,6 +450,7 @@ export default function EntryTable() {
               </th>
             </tr>
           </thead>
+
 
           <tbody>
             {rows.length ? (
@@ -479,6 +527,7 @@ export default function EntryTable() {
           </tbody>
         </table>
       </div>
+
 
       {selectedRow ? (
         <div className="border-t border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
