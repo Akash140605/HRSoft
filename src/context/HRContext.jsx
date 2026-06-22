@@ -22,15 +22,15 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 const dateKey = (v) => String(v || '').slice(0, 10);
 const dayName = (dateStr) => new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long' });
 
-const normalizeEmployee = (e) => ({
+const normalizeEmployee = (e, fallbackHall = null) => ({
   id: e.id ?? e.code,
   name: e.name || '',
   code: String(e.code || '').trim(),
   designation: e.designation || '',
   weekOff: e.week_off || e.weekOff || 'Sunday',
   shift: e.shift || 'A',
-  hallId: e.hall_id || e.hallId || 'H1',
-  hallName: e.hall_name || e.hallName || 'Hall 1',
+  hallId: e.hall_id || e.hallId || fallbackHall?.id || '',
+  hallName: e.hall_name || e.hallName || fallbackHall?.name || '',
 });
 
 const normalizeHall = (h) => ({
@@ -65,7 +65,7 @@ const initialState = () => ({
   currentRole: 'GUEST',
   currentHrCode: '',
   halls: DEFAULT_HALLS,
-  employees: DEFAULT_EMPLOYEES.map(normalizeEmployee),
+  employees: DEFAULT_EMPLOYEES.map((e) => normalizeEmployee(e, DEFAULT_HALLS[0])),
   entries: [],
   logs: [],
   attendanceTracker: [],
@@ -90,10 +90,17 @@ export function HRProvider({ children }) {
         hrApi.getAllAttendance(),
       ]);
 
+      const halls = hallsRes?.success ? (hallsRes.data || []).map(normalizeHall) : state.halls;
+      const fallbackHall = halls?.[0] || null;
+
+      const employees = employeesRes?.success
+        ? (employeesRes.data || []).map((e) => normalizeEmployee(e, fallbackHall))
+        : state.employees.map((e) => normalizeEmployee(e, fallbackHall));
+
       setState((prev) => ({
         ...prev,
-        employees: employeesRes?.success ? (employeesRes.data || []).map(normalizeEmployee) : prev.employees,
-        halls: hallsRes?.success ? (hallsRes.data || []).map(normalizeHall) : prev.halls,
+        halls,
+        employees,
         entries: entriesRes?.success ? (entriesRes.data || []).map(normalizeEntry) : prev.entries,
         logs: logsRes?.success ? (logsRes.data || []) : prev.logs,
         attendanceTracker: trackerRes?.success ? (trackerRes.data || []) : prev.attendanceTracker,
@@ -101,7 +108,7 @@ export function HRProvider({ children }) {
     } catch (error) {
       console.error('Failed to fetch data from API:', error);
     }
-  }, []);
+  }, [state.halls, state.employees]);
 
   useEffect(() => {
     fetchAllDataFromAPI();
@@ -262,7 +269,7 @@ export function HRProvider({ children }) {
         if (entry.id != null) {
           await hrApi.deleteEntry(entry.id);
         }
-      } catch (err) {}
+      } catch {}
     }
   };
 
@@ -412,21 +419,17 @@ export function HRProvider({ children }) {
     if (apiRes.success) {
       const newEntry = normalizeEntry(apiRes.data);
 
-      setState((prev) => {
-        const filteredEntries = prev.entries.filter(
+      setState((prev) => ({
+        ...prev,
+        entries: [newEntry, ...prev.entries.filter(
           (e) =>
             !(
               dateKey(e.date) === state.selectedDate &&
               String(e.code).trim() === String(emp.code).trim() &&
               String(e.source || '') === 'SCAN'
             )
-        );
-
-        return {
-          ...prev,
-          entries: [newEntry, ...filteredEntries],
-        };
-      });
+        )],
+      }));
 
       await deleteOldScanEntriesByCode(emp.code);
 
