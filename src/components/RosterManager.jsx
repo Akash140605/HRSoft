@@ -29,10 +29,16 @@ export default function RosterManager() {
     designation: '',
     weekOff: 'Sunday',
     shift: 'A',
-    hallId: state.halls?.[0]?.id || 'H1',
+    hallId: '',
   });
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!form.hallId && state.halls?.length) {
+      setForm((p) => ({ ...p, hallId: p.hallId || state.halls[0].id }));
+    }
+  }, [state.halls]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -45,13 +51,6 @@ export default function RosterManager() {
     );
   }, [query, state.employees]);
 
-  useEffect(() => {
-    setForm((p) => ({
-      ...p,
-      hallId: state.halls?.[0]?.id || 'H1',
-    }));
-  }, [state.halls]);
-
   const resetForm = () => {
     const ok = window.confirm('Saara local data reset ho jayega. Continue?');
     if (!ok) return;
@@ -59,6 +58,14 @@ export default function RosterManager() {
     setMessage('All local data cleared.');
     setEditingId(null);
     setSelectedIds([]);
+    setForm({
+      name: '',
+      code: '',
+      designation: '',
+      weekOff: 'Sunday',
+      shift: 'A',
+      hallId: state.halls?.[0]?.id || '',
+    });
   };
 
   const toggleSelect = (id) => {
@@ -70,7 +77,11 @@ export default function RosterManager() {
   const toggleSelectAll = () => {
     const visibleIds = rows.map((r) => r.id);
     const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
-    setSelectedIds(allSelected ? selectedIds.filter((id) => !visibleIds.includes(id)) : Array.from(new Set([...selectedIds, ...visibleIds])));
+    setSelectedIds(
+      allSelected
+        ? selectedIds.filter((id) => !visibleIds.includes(id))
+        : Array.from(new Set([...selectedIds, ...visibleIds]))
+    );
   };
 
   const deleteSelectedEmployees = async () => {
@@ -80,15 +91,12 @@ export default function RosterManager() {
       return;
     }
 
-    const ok = window.confirm(
-      `⚠️ WARNING: ${targetIds.length} employees delete ho jayenge! Continue?`
-    );
+    const ok = window.confirm(`⚠️ WARNING: ${targetIds.length} employees delete ho jayenge! Continue?`);
     if (!ok) return;
 
     setLoading(true);
     try {
       let successCount = 0;
-
       for (const id of targetIds) {
         const response = await hrApi.deleteEmployee(id);
         if (response.success) successCount++;
@@ -121,7 +129,7 @@ export default function RosterManager() {
     }
 
     setLoading(true);
-    const hall = state.halls.find((h) => h.id === form.hallId) || state.halls[0];
+    const hall = state.halls.find((h) => String(h.id) === String(form.hallId)) || state.halls[0];
 
     const employeeData = {
       code: form.code.trim(),
@@ -129,16 +137,18 @@ export default function RosterManager() {
       designation: form.designation.trim(),
       week_off: form.weekOff,
       shift: form.shift,
-      hall_id: hall.id,
-      hall_name: hall.name,
+      hall_id: hall?.id || '',
+      hall_name: hall?.name || '',
     };
 
     try {
-      const response = await hrApi.addEmployee(employeeData);
+      const response = editingId
+        ? await hrApi.updateEmployee(editingId, employeeData)
+        : await hrApi.addEmployee(employeeData);
 
       if (response.success) {
         const newEmp = {
-          id: response.data.id || Date.now(),
+          id: response.data.id || editingId || Date.now(),
           name: employeeData.name,
           code: employeeData.code,
           designation: employeeData.designation,
@@ -150,10 +160,12 @@ export default function RosterManager() {
 
         setState((prev) => ({
           ...prev,
-          employees: [newEmp, ...prev.employees],
+          employees: editingId
+            ? prev.employees.map((e) => (e.id === editingId ? newEmp : e))
+            : [newEmp, ...prev.employees],
         }));
 
-        setMessage('Employee added to database!');
+        setMessage(editingId ? 'Employee updated successfully!' : 'Employee added to database!');
         setEditingId(null);
         setForm({
           name: '',
@@ -161,7 +173,7 @@ export default function RosterManager() {
           designation: '',
           weekOff: 'Sunday',
           shift: 'A',
-          hallId: state.halls?.[0]?.id || 'H1',
+          hallId: state.halls?.[0]?.id || '',
         });
       } else {
         setMessage('Error: ' + response.error);
@@ -181,7 +193,7 @@ export default function RosterManager() {
       designation: row.designation || '',
       weekOff: row.weekOff || 'Sunday',
       shift: row.shift || 'A',
-      hallId: row.hallId || state.halls?.[0]?.id || 'H1',
+      hallId: row.hallId || '',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -217,7 +229,7 @@ export default function RosterManager() {
         designation: '',
         weekOff: 'Sunday',
         shift: 'A',
-        hallId: state.halls?.[0]?.id || 'H1',
+        hallId: state.halls?.[0]?.id || '',
       });
     }
   };
@@ -313,8 +325,8 @@ export default function RosterManager() {
           designation,
           weekOff,
           shift,
-          hallId: hall.id,
-          hallName: hall.name,
+          hallId: hall?.id || '',
+          hallName: hall?.name || '',
         };
       });
 
@@ -547,30 +559,14 @@ export default function RosterManager() {
             <table className="min-w-full">
               <thead>
                 <tr>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
-                    Select
-                  </th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
-                    Name
-                  </th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
-                    Code
-                  </th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
-                    Designation
-                  </th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
-                    Hall
-                  </th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
-                    Shift
-                  </th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
-                    Week Off
-                  </th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
-                    Action
-                  </th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Select</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Name</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Code</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Designation</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Hall</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Shift</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Week Off</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Action</th>
                 </tr>
               </thead>
               <tbody>

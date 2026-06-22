@@ -54,12 +54,25 @@ export default function HallManager() {
   }, [fetchHalls, refreshKey]);
 
   const hallSummary = useMemo(() => {
+    const rosterCountMap = new Map();
+    (state.employees || []).forEach((e) => {
+      const key = String(e.hallId || e.hall_id || "");
+      rosterCountMap.set(key, (rosterCountMap.get(key) || 0) + 1);
+    });
+
     const usageMap = new Map((hallUsage || []).map((h) => [String(h.id), h]));
-    return (state.halls || []).map((h) => ({
-      ...h,
-      ...(usageMap.get(String(h.id)) || {}),
-    }));
-  }, [hallUsage, state.halls]);
+
+    return (state.halls || []).map((h) => {
+      const rosterAssigned = rosterCountMap.get(String(h.id)) || 0;
+      const usage = usageMap.get(String(h.id)) || {};
+      return {
+        ...h,
+        ...usage,
+        rosterAssigned,
+        effectiveCapacity: Math.max(Number(h.capacity || 0), rosterAssigned),
+      };
+    });
+  }, [hallUsage, state.halls, state.employees]);
 
   const entriesForSelectedDate = activeEntries || [];
 
@@ -70,8 +83,20 @@ export default function HallManager() {
     });
   }, [SHIFT_OPTIONS, entriesForSelectedDate]);
 
+  const hallShiftBreakdown = useMemo(() => {
+    return hallSummary.map((hall) => {
+      const counts = {};
+      SHIFT_OPTIONS.forEach((s) => {
+        counts[s.code] = entriesForSelectedDate.filter(
+          (e) => String(e.hallId || e.hall_id) === String(hall.id) && e.shift === s.code
+        ).length;
+      });
+      return { hallId: hall.id, counts };
+    });
+  }, [hallSummary, SHIFT_OPTIONS, entriesForSelectedDate]);
+
   const totalUsed = hallSummary.reduce((sum, hall) => sum + Number(hall.used || 0), 0);
-  const totalCapacity = hallSummary.reduce((sum, hall) => sum + Number(hall.capacity || 0), 0);
+  const totalCapacity = hallSummary.reduce((sum, hall) => sum + Number(hall.effectiveCapacity || hall.capacity || 0), 0);
   const totalOccupancy = totalCapacity > 0 ? Math.round((totalUsed / totalCapacity) * 100) : 0;
 
   const handleToggle = (hallId) => {
@@ -81,7 +106,7 @@ export default function HallManager() {
   const updateHall = async (hallId, updates) => {
     setState((prev) => ({
       ...prev,
-      halls: prev.halls.map((h) => (h.id === hallId ? { ...h, ...updates } : h)),
+      halls: prev.halls.map((h) => (String(h.id) === String(hallId) ? { ...h, ...updates } : h)),
     }));
 
     setLoading(true);
@@ -112,7 +137,7 @@ export default function HallManager() {
             </div>
             <h2 className="mt-3 text-xl font-black tracking-tight sm:text-2xl">Hall Manager</h2>
             <p className="mt-2 max-w-2xl text-sm text-white/80">
-              Real database halls, live occupancy, and edit controls.
+              Roster-based hall capacity, live occupancy, and shift-wise breakdown.
             </p>
           </div>
         </div>
@@ -182,9 +207,7 @@ export default function HallManager() {
             <div key={shift.code} className="border-2 border-slate-200 bg-white p-4 shadow-sm">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{shift.label}</div>
               <div className="mt-1 text-xl font-bold text-slate-900">{shift.count}</div>
-              <div className="text-xs text-slate-500">
-                {shift.start} - {shift.end}
-              </div>
+              <div className="text-xs text-slate-500">{shift.start} - {shift.end}</div>
             </div>
           ))}
         </div>
@@ -194,11 +217,14 @@ export default function HallManager() {
             {hallSummary.map((hall, index) => {
               const capacity = Number(hall.capacity ?? 0);
               const used = Number(hall.used ?? 0);
-              const percentage = capacity > 0 ? Math.min((used / capacity) * 100, 100) : 0;
+              const rosterAssigned = Number(hall.rosterAssigned ?? 0);
+              const effectiveCapacity = Number(hall.effectiveCapacity ?? capacity);
+              const percentage = effectiveCapacity > 0 ? Math.min((used / effectiveCapacity) * 100, 100) : 0;
               const hallName = hall.name || `Hall ${index + 1}`;
               const isOpen = openHallId === hall.id;
               const accent = accentMap[hall.color] || accentMap.blue;
               const styleClass = isOpen ? `${accent.border} ${accent.ring} shadow-lg` : "border-slate-200 shadow-sm";
+              const shiftBreakdown = hallShiftBreakdown.find((x) => String(x.hallId) === String(hall.id))?.counts || {};
 
               return (
                 <div key={hall.id} className={`overflow-hidden border-2 bg-white transition ${styleClass}`}>
@@ -222,9 +248,9 @@ export default function HallManager() {
                       <div className="flex items-center gap-2 text-slate-600">
                         <div className="text-right">
                           <div className="text-sm font-bold text-slate-900">
-                            {used} / {capacity}
+                            Used {used} / {effectiveCapacity}
                           </div>
-                          <div className="text-xs text-slate-500">Used / Capacity</div>
+                          <div className="text-xs text-slate-500">Roster {rosterAssigned} assigned</div>
                         </div>
                         {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                       </div>
@@ -245,8 +271,17 @@ export default function HallManager() {
                       </div>
                     </div>
 
+                    <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                      {SHIFT_OPTIONS.map((shift) => (
+                        <div key={shift.code} className="border border-slate-200 bg-slate-50 px-2 py-2 text-center">
+                          <div className="font-semibold text-slate-700">{shift.code}</div>
+                          <div className="text-slate-500">{shiftBreakdown[shift.code] || 0}</div>
+                        </div>
+                      ))}
+                    </div>
+
                     {isOpen && (
-                      <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-200 pt-4 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-200 pt-4 sm:grid-cols-3 xl:grid-cols-4">
                         <div>
                           <label className="mb-1 block text-xs font-medium text-slate-600">Hall name</label>
                           <input
@@ -259,7 +294,7 @@ export default function HallManager() {
                         </div>
 
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-600">Capacity</label>
+                          <label className="mb-1 block text-xs font-medium text-slate-600">Base capacity</label>
                           <input
                             type="number"
                             min="0"
