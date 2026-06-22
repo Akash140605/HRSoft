@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useHR } from '../context/HRContext';
 
+
 function Toast({ toast, onClose }) {
   useEffect(() => {
     if (!toast) return;
@@ -24,7 +25,9 @@ function Toast({ toast, onClose }) {
     return () => clearTimeout(t);
   }, [toast, onClose]);
 
+
   if (!toast) return null;
+
 
   const cls =
     toast.type === 'success'
@@ -33,12 +36,14 @@ function Toast({ toast, onClose }) {
       ? 'bg-rose-600 text-white'
       : 'bg-amber-500 text-white';
 
+
   const Icon =
     toast.type === 'success'
       ? CheckCircle2
       : toast.type === 'error'
       ? XCircle
       : AlertTriangle;
+
 
   return (
     <div className={`fixed left-1/2 top-4 z-[100] -translate-x-1/2 rounded border-2 px-4 py-3 shadow-lg ${cls}`}>
@@ -50,12 +55,15 @@ function Toast({ toast, onClose }) {
   );
 }
 
+
 function MobileScanner({ onResult, onClose }) {
   const videoRef = useRef(null);
   const scannerRef = useRef(null);
 
+
   useEffect(() => {
     let mounted = true;
+
 
     const startScanner = async () => {
       try {
@@ -70,13 +78,16 @@ function MobileScanner({ onResult, onClose }) {
           }
         );
 
+
         if (mounted) await scannerRef.current.start();
       } catch (err) {
         console.error('QR Scanner Error:', err);
       }
     };
 
+
     startScanner();
+
 
     return () => {
       mounted = false;
@@ -87,6 +98,7 @@ function MobileScanner({ onResult, onClose }) {
       }
     };
   }, [onResult, onClose]);
+
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4">
@@ -114,6 +126,7 @@ function MobileScanner({ onResult, onClose }) {
   );
 }
 
+
 export default function ScannerPanel() {
   const {
     state,
@@ -124,6 +137,7 @@ export default function ScannerPanel() {
     totals,
     activeEntries
   } = useHR();
+
 
   const [code, setCode] = useState('');
   const [selectedHall, setSelectedHall] = useState('H1');
@@ -136,25 +150,36 @@ export default function ScannerPanel() {
   const [showHistory, setShowHistory] = useState(false);
   const [showMobileScanner, setShowMobileScanner] = useState(false);
 
+
   const canScan = !totals.locked;
   const codeInputRef = useRef(null);
   const successBeepRef = useRef(null);
   const errorBeepRef = useRef(null);
+
 
   const empResult = useMemo(
     () => state.employees.find((e) => String(e.code).trim() === String(code).trim()),
     [code, state.employees]
   );
 
+
   const recentRows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return activeEntries.filter((e) =>
+    const filtered = activeEntries.filter((e) =>
       !q ||
-      `${e.name} ${e.code} ${e.designation} ${e.hallName} ${e.source} ${e.overrideReason}`
+      `${e.name} ${e.code} ${e.designation} ${e.hallName} ${e.source} ${e.overrideReason || e.override_reason}`
         .toLowerCase()
         .includes(q)
     );
+    
+    // ← FIX: snake_case → camelCase map karo
+    return filtered.map((entry) => ({
+      ...entry,
+      hallName: entry.hall_name || entry.hallName || `Hall ${entry.hall_id || entry.hallId || '?'}`,
+      overrideReason: entry.override_reason || entry.overrideReason || "",
+    }));
   }, [activeEntries, query]);
+
 
   const playSuccess = () => {
     try {
@@ -165,6 +190,7 @@ export default function ScannerPanel() {
     } catch {}
   };
 
+
   const playError = () => {
     try {
       if (errorBeepRef.current) {
@@ -174,28 +200,34 @@ export default function ScannerPanel() {
     } catch {}
   };
 
+
   const pushToast = (type, message) => {
     setToast({ type, message });
     if (type === 'success') playSuccess();
     else playError();
   };
 
+
   const focusCode = () => codeInputRef.current?.focus();
+
 
   const handleSuccessProcess = (ok) => {
     if (ok) setCode('');
     focusCode();
   };
 
+
   const onProcess = async (value) => {
     const finalCode = String(value ?? code).trim();
     if (!finalCode) return pushToast('error', 'Please enter code.');
     if (!canScan) return pushToast('error', 'Capacity locked.');
 
+
     setBusy(true);
     try {
       const res = await processEntry(finalCode);
       pushToast(res.ok ? 'success' : res.type || 'error', res.text || 'Done');
+
 
       if (!res.ok && res.weekOff && (state.currentRole === 'HR' || state.currentRole === 'ADMIN')) {
         const ok = window.confirm('Week off hai. HR override karna hai?');
@@ -211,11 +243,13 @@ export default function ScannerPanel() {
         }
       }
 
+
       handleSuccessProcess(res.ok);
     } finally {
       setBusy(false);
     }
   };
+
 
   const handleScannedCode = async (val) => {
     const value = String(val || '').trim();
@@ -224,10 +258,12 @@ export default function ScannerPanel() {
     await onProcess(value);
   };
 
+
   const onMove = async () => {
     if (!code.trim() || !selectedHall || !reason.trim()) {
       return pushToast('error', 'Code, hall, reason sab required hain.');
     }
+
 
     setBusy(true);
     try {
@@ -243,6 +279,7 @@ export default function ScannerPanel() {
     }
   };
 
+
   const onQuickCopy = async () => {
     try {
       await navigator.clipboard.writeText(code.trim());
@@ -252,6 +289,7 @@ export default function ScannerPanel() {
     }
   };
 
+
   const handleInputKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -259,13 +297,16 @@ export default function ScannerPanel() {
     }
   };
 
+
   const showHRControls = state.currentRole === 'HR' || state.currentRole === 'ADMIN';
+
 
   return (
     <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
       <audio ref={successBeepRef} src="/beep.wav" preload="auto" />
       <audio ref={errorBeepRef} src="/error.wav" preload="auto" />
       <Toast toast={toast} onClose={() => setToast(null)} />
+
 
       <div className="border-b border-slate-300 bg-[#23205C] px-4 py-4 text-white sm:px-5">
         <div className="flex items-center justify-between gap-3">
@@ -278,6 +319,7 @@ export default function ScannerPanel() {
           </button>
         </div>
       </div>
+
 
       <div className={`${menuOpen ? 'block' : 'hidden'} border-b border-slate-300 bg-slate-50 p-4 md:block sm:p-5`}>
         {showHRControls && (
@@ -314,6 +356,7 @@ export default function ScannerPanel() {
           </div>
         )}
 
+
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <input
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
@@ -343,6 +386,7 @@ export default function ScannerPanel() {
         </div>
       </div>
 
+
       <div className="p-4 sm:p-5">
         <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-4">
           <div className="border-2 border-slate-300 bg-white p-5"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Role</div><div className="mt-2 text-xl font-bold text-slate-900">{state.currentRole}</div></div>
@@ -350,6 +394,7 @@ export default function ScannerPanel() {
           <div className="border-2 border-slate-300 bg-white p-5"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Capacity</div><div className="mt-2 text-xl font-bold text-slate-900">{totals.totalCapacity}</div></div>
           <div className="border-2 border-slate-300 bg-white p-5"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Status</div><div className={`mt-2 text-xl font-bold ${totals.locked ? 'text-[#E0222A]' : 'text-emerald-600'}`}>{totals.locked ? 'Locked' : 'Open'}</div></div>
         </div>
+
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <div className="border-2 border-slate-300 bg-white p-5">
@@ -399,6 +444,7 @@ export default function ScannerPanel() {
             </div>
           </div>
 
+
           <div className="border-2 border-slate-300 bg-white p-5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 font-bold text-slate-900">
@@ -414,6 +460,7 @@ export default function ScannerPanel() {
                 {showHistory ? 'Hide Logs' : 'Show Logs'}
               </button>
             </div>
+
 
             <div className="mt-4 space-y-4">
               {hallUsage.map((h) => (
@@ -435,6 +482,7 @@ export default function ScannerPanel() {
             </div>
           </div>
         </div>
+
 
         {showHistory && (showHRControls || state.currentRole === 'ADMIN') && (
           <div className="mt-5 border-2 border-slate-300 bg-white p-5">
