@@ -9,17 +9,20 @@ import HallManager from "./components/HallManager";
 import LoginScreen from "./components/LoginScreen";
 import { Menu, X } from "lucide-react";
 
+
 function DashboardApp() {
   const { state, logout } = useHR();
   const [activeTab, setActiveTab] = useState("scanner");
   const [tabsOpen, setTabsOpen] = useState(false);
 
+
   const showRoster = state.currentRole === "HR" || state.currentRole === "ADMIN";
   const showHRLogs = state.currentRole === "ADMIN";
   const showTracker = state.currentRole === "ADMIN";
   const showEntryTable = state.currentRole === "HR" || state.currentRole === "ADMIN";
-  // const showHallManager = state.currentRole === "HR" || state.currentRole === "ADMIN";
+  const showHallManager = state.currentRole === "HR" || state.currentRole === "ADMIN";
   const isGuest = state.currentRole === "GUEST";
+
 
   useEffect(() => {
     if (isGuest) {
@@ -28,15 +31,17 @@ function DashboardApp() {
     }
   }, [isGuest]);
 
+
   const tabs = useMemo(() => {
     const base = [{ key: "scanner", label: "Scanner" }];
     if (showEntryTable) base.push({ key: "entries", label: "Entries" });
     if (showRoster) base.push({ key: "roster", label: "Roster" });
-    // if (showHallManager) base.push({ key: "hall", label: "Hall Manager" });
+    if (showHallManager) base.push({ key: "hall", label: "Hall Manager" });
     if (showTracker) base.push({ key: "tracker", label: "Tracker" });
     if (showHRLogs) base.push({ key: "logs", label: "HR Logs" });
     return base;
-  }, [showEntryTable,  showHRLogs, showRoster, showTracker]);
+  }, [showEntryTable, showHRLogs, showRoster, showTracker, showHallManager]);
+
 
   const renderTab = () => {
     switch (activeTab) {
@@ -44,8 +49,8 @@ function DashboardApp() {
         return showEntryTable ? <EntryTable /> : <ScannerPanel />;
       case "roster":
         return showRoster ? <RosterManager /> : <ScannerPanel />;
-      // case "hall":
-        // return showHallManager ? <HallManager /> : <ScannerPanel />;
+      case "hall":
+        return showHallManager ? <HallManager /> : <ScannerPanel />;
       case "tracker":
         return showTracker ? <EmployeeTracker /> : <ScannerPanel />;
       case "logs":
@@ -56,10 +61,12 @@ function DashboardApp() {
     }
   };
 
+
   const selectTab = (key) => {
     setActiveTab(key);
     setTabsOpen(false);
   };
+
 
   const handleLogout = () => {
     setTabsOpen(false);
@@ -67,9 +74,11 @@ function DashboardApp() {
     logout();
   };
 
+
   if (isGuest) {
     return <LoginScreen />;
   }
+
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 overflow-x-hidden overflow-y-auto">
@@ -81,6 +90,7 @@ function DashboardApp() {
             className="block h-9 w-auto max-w-[55vw] object-contain sm:h-10 md:h-12"
           />
 
+
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -90,6 +100,7 @@ function DashboardApp() {
               {tabsOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
 
+
             <button
               onClick={handleLogout}
               className="shrink-0 inline-flex items-center justify-center border-2 border-[#E0222A] bg-[#E0222A] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#E0222A]/25 transition hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98]"
@@ -98,6 +109,7 @@ function DashboardApp() {
             </button>
           </div>
         </div>
+
 
         <div
           className={`border-t border-slate-200 bg-white px-4 md:px-6 ${tabsOpen ? "block" : "hidden"} md:block`}
@@ -121,12 +133,14 @@ function DashboardApp() {
         </div>
       </header>
 
+
       <main className="w-full px-4 py-6 md:px-6 pt-24 md:pt-40">
         <div className="grid grid-cols-1 gap-6">{renderTab()}</div>
       </main>
     </div>
   );
 }
+
 
 export default function App() {
   return (

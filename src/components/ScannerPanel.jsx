@@ -13,8 +13,7 @@ import {
   Loader2,
   ScanLine,
   Copy,
-  Search,
-  Smartphone
+  Search
 } from 'lucide-react';
 import { useHR } from '../context/HRContext';
 
@@ -26,17 +25,23 @@ function Toast({ toast, onClose }) {
   }, [toast, onClose]);
 
   if (!toast) return null;
+
   const cls =
     toast.type === 'success'
       ? 'bg-emerald-600 text-white'
       : toast.type === 'error'
       ? 'bg-rose-600 text-white'
       : 'bg-amber-500 text-white';
+
   const Icon =
-    toast.type === 'success' ? CheckCircle2 : toast.type === 'error' ? XCircle : AlertTriangle;
+    toast.type === 'success'
+      ? CheckCircle2
+      : toast.type === 'error'
+      ? XCircle
+      : AlertTriangle;
 
   return (
-    <div className={`fixed left-1/2 top-4 z-[100] -translate-x-1/2 border-2 rounded px-4 py-3 shadow-lg ${cls}`}>
+    <div className={`fixed left-1/2 top-4 z-[100] -translate-x-1/2 rounded border-2 px-4 py-3 shadow-lg ${cls}`}>
       <div className="flex items-center gap-2 text-sm font-semibold">
         <Icon className="h-4 w-4" />
         {toast.message}
@@ -47,26 +52,42 @@ function Toast({ toast, onClose }) {
 
 function MobileScanner({ onResult, onClose }) {
   const videoRef = useRef(null);
+  const scannerRef = useRef(null);
 
   useEffect(() => {
-    let scanner;
+    let mounted = true;
+
     const startScanner = async () => {
       try {
-        scanner = new QrScanner(videoRef.current, (result) => {
-          const text = result?.data || result;
-          onResult(text);
-          scanner.stop();
-          onClose();
-        });
-        await scanner.start();
+        scannerRef.current = new QrScanner(
+          videoRef.current,
+          async (result) => {
+            const text = result?.data || result;
+            await onResult(text);
+            if (scannerRef.current) {
+              scannerRef.current.stop();
+            }
+            onClose();
+          }
+        );
+
+        if (mounted) {
+          await scannerRef.current.start();
+        }
       } catch (err) {
         console.error('QR Scanner Error:', err);
       }
     };
+
     startScanner();
+
     return () => {
-      scanner?.stop();
-      scanner?.destroy();
+      mounted = false;
+      if (scannerRef.current) {
+        scannerRef.current.stop();
+        scannerRef.current.destroy();
+        scannerRef.current = null;
+      }
     };
   }, [onResult, onClose]);
 
@@ -83,7 +104,14 @@ function MobileScanner({ onResult, onClose }) {
             Close
           </button>
         </div>
-        <video ref={videoRef} autoPlay playsInline muted className="w-full border-2 border-slate-300" style={{ height: '350px' }} />
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full border-2 border-slate-300"
+          style={{ height: '350px' }}
+        />
       </div>
     </div>
   );
@@ -126,7 +154,10 @@ export default function ScannerPanel() {
   const recentRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return activeEntries.filter((e) =>
-      !q || `${e.name} ${e.code} ${e.hallName} ${e.source} ${e.overrideReason}`.toLowerCase().includes(q)
+      !q ||
+      `${e.name} ${e.code} ${e.designation} ${e.hallName} ${e.source} ${e.overrideReason}`
+        .toLowerCase()
+        .includes(q)
     );
   }, [activeEntries, query]);
 
@@ -167,26 +198,28 @@ export default function ScannerPanel() {
     if (!canScan) return pushToast('error', 'Capacity locked.');
 
     setBusy(true);
-    const res = await processEntry(finalCode);
-    pushToast(res.ok ? 'success' : res.type || 'error', res.text || 'Done');
+    try {
+      const res = await processEntry(finalCode);
+      pushToast(res.ok ? 'success' : res.type || 'error', res.text || 'Done');
 
-    if (!res.ok && res.weekOff && state.currentRole === 'HR') {
-      const ok = window.confirm('Week off hai. HR override karna hai?');
-      if (ok) {
-        const ov = hrOverrideEntry({
-          code: finalCode,
-          hallId: selectedHall,
-          reason: reason || 'Week off override by HR'
-        });
-        pushToast(ov.ok ? 'success' : 'error', ov.text);
-        handleSuccessProcess(ov.ok);
-        setBusy(false);
-        return;
+      if (!res.ok && res.weekOff && state.currentRole === 'HR') {
+        const ok = window.confirm('Week off hai. HR override karna hai?');
+        if (ok) {
+          const ov = await hrOverrideEntry({
+            code: finalCode,
+            hallId: selectedHall,
+            reason: reason || 'Week off override by HR'
+          });
+          pushToast(ov.ok ? 'success' : 'error', ov.text || 'Override done');
+          handleSuccessProcess(ov.ok);
+          return;
+        }
       }
-    }
 
-    handleSuccessProcess(res.ok);
-    setBusy(false);
+      handleSuccessProcess(res.ok);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleScannedCode = async (val) => {
@@ -196,14 +229,24 @@ export default function ScannerPanel() {
     await onProcess(value);
   };
 
-  const onMove = () => {
+  const onMove = async () => {
     if (!isHrLogin) return pushToast('error', 'Pehle HR login karo.');
     if (!code.trim() || !selectedHall || !reason.trim()) {
       return pushToast('error', 'Code, hall, reason sab required hain.');
     }
-    const res = moveEmployeeToHall({ code: code.trim(), hallId: selectedHall, reason: reason.trim() });
-    pushToast(res.ok ? 'success' : 'error', res.text);
-    handleSuccessProcess(res.ok);
+
+    setBusy(true);
+    try {
+      const res = await moveEmployeeToHall({
+        code: code.trim(),
+        hallId: selectedHall,
+        reason: reason.trim()
+      });
+      pushToast(res.ok ? 'success' : 'error', res.text || 'Done');
+      handleSuccessProcess(res.ok);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const onHrLogin = () => {
@@ -243,14 +286,6 @@ export default function ScannerPanel() {
             <p className="truncate text-xs text-white/70 sm:text-sm">Scanner panel with hall control</p>
           </div>
           <div className="flex items-center gap-2">
-            {/* <button
-              type="button"
-              className="hidden border-2 border-white/30 bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20 md:inline-flex md:items-center md:gap-1"
-              onClick={() => setShowMobileScanner(true)}
-            >
-              <Smartphone className="h-4 w-4" />
-              Mobile Scan
-            </button> */}
             <button type="button" className="md:hidden" onClick={() => setMenuOpen((v) => !v)}>
               {menuOpen ? <X /> : <Menu />}
             </button>
@@ -264,7 +299,7 @@ export default function ScannerPanel() {
             <div className="mb-3 text-sm font-bold text-[#E0222A]">HR Controls</div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <input
-                className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
                 placeholder="HR 6-digit code"
                 value={hrLoginCode}
                 onChange={(e) => setHrLoginCode(e.target.value)}
@@ -277,7 +312,7 @@ export default function ScannerPanel() {
                 HR Login
               </button>
               <input
-                className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
                 placeholder="Reason / override note"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -294,16 +329,24 @@ export default function ScannerPanel() {
                 ))}
               </select>
             </div>
+
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 className="border-2 border-[#E0222A] bg-[#E0222A]/10 px-4 py-3 font-semibold text-[#E0222A] hover:bg-[#E0222A]/20"
                 type="button"
                 onClick={onMove}
+                disabled={busy}
               >
                 <ShieldAlert className="mr-1 inline h-4 w-4" />
                 Move Hall
               </button>
-              <span className={`border-2 px-4 py-3 text-sm font-semibold ${isHrLogin ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-300 bg-white text-slate-600'}`}>
+              <span
+                className={`border-2 px-4 py-3 text-sm font-semibold ${
+                  isHrLogin
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                    : 'border-slate-300 bg-white text-slate-600'
+                }`}
+              >
                 {isHrLogin ? 'HR unlocked' : 'HR locked'}
               </span>
             </div>
@@ -312,7 +355,7 @@ export default function ScannerPanel() {
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <input
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             placeholder="Select employee code"
             value={code}
             onChange={(e) => setCode(e.target.value)}
@@ -370,33 +413,42 @@ export default function ScannerPanel() {
             <div className="mt-4 flex gap-3">
               <input
                 ref={codeInputRef}
-                className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
                 placeholder={mode === 'manual' ? 'Type punch code manually' : 'Scan or type code'}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 onKeyDown={handleInputKeyDown}
               />
-              <button className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={onQuickCopy}>
+              <button
+                className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50"
+                type="button"
+                onClick={onQuickCopy}
+              >
                 <Copy className="h-4 w-4" />
               </button>
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
-              <button className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={() => onProcess()}>
+              <button
+                className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50"
+                type="button"
+                onClick={() => onProcess()}
+              >
                 Verify
               </button>
-              <button className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98] disabled:opacity-50" type="button" onClick={() => onProcess()} disabled={busy || !canScan}>
+              <button
+                className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98] disabled:opacity-50"
+                type="button"
+                onClick={() => onProcess()}
+                disabled={busy || !canScan}
+              >
                 {busy ? 'Saving...' : 'Save Entry'}
               </button>
-              {/* <button className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={() => setShowMobileScanner(true)}>
-                <Smartphone className="mr-1 inline h-4 w-4" />
-                Mobile Scan
-              </button> */}
             </div>
             <div className="mt-4 border-2 border-slate-300 bg-slate-50 px-4 py-2 text-sm text-slate-700">
               Current hall of employee will be used automatically if space is available.
             </div>
             <div className="mt-4 text-sm text-slate-600">
-              Matched employee: <span className="font-bold text-slate-900">{empResult ? `${empResult.name} (${empResult.code})` : '-'}</span>
+              Matched employee: <span className="font-bold text-slate-900">{empResult ? `${empResult.name} (${empResult.code}) - ${empResult.designation || 'No designation'}` : '-'}</span>
             </div>
           </div>
 
@@ -415,6 +467,7 @@ export default function ScannerPanel() {
                 {showHistory ? 'Hide Logs' : 'Show Logs'}
               </button>
             </div>
+
             <div className="mt-4 space-y-4">
               {hallUsage.map((h) => (
                 <div key={h.id} className="border-2 border-slate-300 p-4">
@@ -427,7 +480,9 @@ export default function ScannerPanel() {
                   <div className="mt-3 h-2 border-2 border-slate-300 bg-white">
                     <div
                       className={`h-2 ${h.full ? 'bg-[#E0222A]' : 'bg-slate-700'}`}
-                      style={{ width: `${Math.min(100, Math.round((h.used / Math.max(h.capacity, 1)) * 100))}%` }}
+                      style={{
+                        width: `${Math.min(100, Math.round((h.used / Math.max(h.capacity, 1)) * 100))}%`
+                      }}
                     />
                   </div>
                 </div>
@@ -441,19 +496,20 @@ export default function ScannerPanel() {
             <div className="mb-4 text-sm font-bold text-slate-900">Recent Entries</div>
             <div className="mb-4">
               <input
-                className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-                placeholder="Search entries"
+                className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                placeholder="Search entries (name, code, designation, hall)"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
-            <div className="table-wrap max-h-[360px] overflow-auto">
+            <div className="max-h-[360px] overflow-auto">
               <table className="min-w-full">
                 <thead>
                   <tr>
                     <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Time</th>
                     <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Code</th>
                     <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Name</th>
+                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Designation</th>
                     <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Hall</th>
                     <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Source</th>
                     <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Reason</th>
@@ -466,6 +522,7 @@ export default function ScannerPanel() {
                         <td className="px-3 py-2 text-sm text-slate-700">{r.time || '-'}</td>
                         <td className="px-3 py-2 text-sm font-semibold text-slate-900">{r.code}</td>
                         <td className="px-3 py-2 text-sm text-slate-900">{r.name}</td>
+                        <td className="px-3 py-2 text-sm text-slate-700">{r.designation || '-'}</td>
                         <td className="px-3 py-2 text-sm text-slate-700">{r.hallName}</td>
                         <td className="px-3 py-2 text-sm text-slate-700">{r.source}</td>
                         <td className="px-3 py-2 text-sm text-slate-500">{r.overrideReason || '-'}</td>
@@ -473,7 +530,7 @@ export default function ScannerPanel() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="6" className="py-8 text-center text-sm text-slate-500">No records found.</td>
+                      <td colSpan="7" className="py-8 text-center text-sm text-slate-500">No records found.</td>
                     </tr>
                   )}
                 </tbody>
@@ -482,10 +539,6 @@ export default function ScannerPanel() {
           </div>
         )}
       </div>
-
-      {showMobileScanner && (
-        <MobileScanner onResult={handleMobileScanResult} onClose={() => setShowMobileScanner(false)} />
-      )}
     </div>
   );
 }

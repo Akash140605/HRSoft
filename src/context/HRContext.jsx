@@ -3,64 +3,42 @@ import React, {
   useContext,
   useEffect,
   useMemo,
-  useState
+  useState,
+  useCallback,
 } from 'react';
-import {
-  DEFAULT_EMPLOYEES,
-  DEFAULT_HALLS,
-  SHIFT_OPTIONS,
-  DAYS
-} from '../data/defaultData';
+import { DEFAULT_EMPLOYEES, DEFAULT_HALLS, SHIFT_OPTIONS, DAYS } from '../data/defaultData';
+import hrApi from '../api/hrApi';
 
-// hardcoded users for login
 const DEFAULT_USERS = [
   { username: 'user1', password: 'user123', role: 'USER' },
   { username: 'hr1', password: 'hr123', role: 'HR' },
-  { username: 'admin1', password: 'admin123', role: 'ADMIN' }
+  { username: 'admin1', password: 'admin123', role: 'ADMIN' },
 ];
 
 const HRContext = createContext(null);
-const STORAGE_KEY = 'demo_hr_system_v3';
+const STORAGE_KEY = 'demo_hr_system_v5';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const dateKey = (v) => String(v || '').slice(0, 10);
-const dayName = (dateStr) =>
-  new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long' });
-const nowTime = () =>
-  new Date().toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
+const dayName = (dateStr) => new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long' });
 
 const normalizeEmployee = (e) => ({
-  id: e.id,
+  id: e.id ?? e.code,
   name: e.name || '',
   code: String(e.code || '').trim(),
-  weekOff: e.weekOff || 'Sunday',
+  designation: e.designation || '',
+  weekOff: e.week_off || e.weekOff || 'Sunday',
   shift: e.shift || 'A',
-  hallId: e.hallId || 'H1',
-  hallName: e.hallName || 'Hall 1'
+  hallId: e.hall_id || e.hallId || 'H1',
+  hallName: e.hall_name || e.hallName || 'Hall 1',
 });
 
-const getShift = (code) => SHIFT_OPTIONS.find((s) => s.code === code);
-
-const isInShift = (timeHHMM, shiftCode) => {
-  const shift = getShift(shiftCode);
-  if (!shift) return true;
-
-  const [h, m] = timeHHMM.split(':').map(Number);
-  const current = h * 60 + m;
-  const [sh, sm] = shift.start.split(':').map(Number);
-  const [eh, em] = shift.end.split(':').map(Number);
-  const start = sh * 60 + sm;
-  const end = eh * 60 + em;
-
-  if (shiftCode === 'C' || shiftCode === 'BB') {
-    return current >= start || current < end;
-  }
-  return current >= start && current < end;
-};
+const normalizeHall = (h) => ({
+  id: h.id,
+  name: h.name || '',
+  capacity: Number(h.capacity || 0),
+  color: h.color || 'blue',
+});
 
 const initialState = () => ({
   selectedDate: todayISO(),
@@ -70,7 +48,8 @@ const initialState = () => ({
   halls: DEFAULT_HALLS,
   employees: DEFAULT_EMPLOYEES.map(normalizeEmployee),
   entries: [],
-  logs: []
+  logs: [],
+  attendanceTracker: [],
 });
 
 export function HRProvider({ children }) {
@@ -82,8 +61,37 @@ export function HRProvider({ children }) {
     return initialState();
   });
 
+  const fetchAllDataFromAPI = useCallback(async () => {
+    try {
+      const [employeesRes, hallsRes, entriesRes, logsRes, trackerRes] = await Promise.all([
+        hrApi.getEmployees(),
+        hrApi.getHalls(),
+        hrApi.getEntries(),
+        hrApi.getLogs(),
+        hrApi.getAllAttendance(),
+      ]);
+
+      setState((prev) => ({
+        ...prev,
+        employees: employeesRes?.success ? (employeesRes.data || []).map(normalizeEmployee) : prev.employees,
+        halls: hallsRes?.success ? (hallsRes.data || []).map(normalizeHall) : prev.halls,
+        entries: entriesRes?.success ? (entriesRes.data || []) : prev.entries,
+        logs: logsRes?.success ? (logsRes.data || []) : prev.logs,
+        attendanceTracker: trackerRes?.success ? (trackerRes.data || []) : prev.attendanceTracker,
+      }));
+    } catch (error) {
+      console.error('Failed to fetch data from API:', error);
+    }
+  }, []);
+
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    fetchAllDataFromAPI();
+  }, [fetchAllDataFromAPI]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {}
   }, [state]);
 
   const resetAll = () => {
@@ -94,6 +102,11 @@ export function HRProvider({ children }) {
     } catch {}
   };
 
+  const employeeMap = useMemo(
+    () => new Map(state.employees.map((e) => [String(e.code).trim(), e])),
+    [state.employees]
+  );
+
   const activeEntries = useMemo(
     () => state.entries.filter((e) => dateKey(e.date) === state.selectedDate),
     [state.entries, state.selectedDate]
@@ -101,70 +114,84 @@ export function HRProvider({ children }) {
 
   const hallUsage = useMemo(() => {
     return state.halls.map((hall) => {
-      const used = activeEntries.filter((e) => e.hallId === hall.id).length;
+      const used = activeEntries.filter(
+        (e) => String(e.hall_id || e.hallId) === String(hall.id)
+      ).length;
+
       return {
         ...hall,
         used,
-        remaining: Math.max(0, hall.capacity - used),
-        full: used >= hall.capacity
+        remaining: Math.max(0, Number(hall.capacity || 0) - used),
+        full: used >= Number(hall.capacity || 0),
       };
     });
   }, [state.halls, activeEntries]);
 
   const totals = useMemo(
     () => ({
-      totalCapacity: state.halls.reduce(
-        (a, h) => a + Number(h.capacity || 0),
-        0
-      ),
+      totalCapacity: state.halls.reduce((a, h) => a + Number(h.capacity || 0), 0),
       selectedCount: activeEntries.length,
-      locked: hallUsage.every((h) => h.full)
+      remainingCount: Math.max(0, hallUsage.reduce((a, h) => a + Number(h.remaining || 0), 0)),
+      locked: hallUsage.length > 0 ? hallUsage.every((h) => h.full) : false,
     }),
     [state.halls, activeEntries.length, hallUsage]
   );
 
-  const employeeMap = useMemo(
-    () =>
-      new Map(
-        state.employees.map((e) => [String(e.code).trim(), e])
-      ),
-    [state.employees]
+  const canOverride = useMemo(
+    () => state.currentRole === 'HR' || state.currentRole === 'ADMIN',
+    [state.currentRole]
   );
 
+  const getShift = (code) => SHIFT_OPTIONS.find((s) => s.code === code);
+
+  const isInShift = (timeHHMM, shiftCode) => {
+    const shift = getShift(shiftCode);
+    if (!shift) return true;
+
+    const [h, m] = timeHHMM.split(':').map(Number);
+    const current = h * 60 + m;
+    const [sh, sm] = shift.start.split(':').map(Number);
+    const [eh, em] = shift.end.split(':').map(Number);
+    const start = sh * 60 + sm;
+    const end = eh * 60 + em;
+
+    if (shiftCode === 'C' || shiftCode === 'BB') {
+      return current >= start || current < end;
+    }
+    return current >= start && current < end;
+  };
+
   const getNextHallForEmployee = (employee) => {
-    const preferred = state.halls.find((h) => h.id === employee.hallId);
+    const preferred = state.halls.find((h) => String(h.id) === String(employee.hallId));
     if (preferred) {
       const used = activeEntries.filter(
-        (e) => e.hallId === preferred.id
+        (e) => String(e.hall_id || e.hallId) === String(preferred.id)
       ).length;
-      if (used < preferred.capacity) return preferred;
+      if (used < Number(preferred.capacity || 0)) return preferred;
     }
+
     return (
-      state.halls.find(
-        (h) =>
-          activeEntries.filter((e) => e.hallId === h.id).length <
-          h.capacity
-      ) || state.halls[0]
+      state.halls.find((h) => {
+        const used = activeEntries.filter(
+          (e) => String(e.hall_id || e.hallId) === String(h.id)
+        ).length;
+        return used < Number(h.capacity || 0);
+      }) || state.halls[0]
     );
   };
 
   const login = (username, password) => {
     const user = DEFAULT_USERS.find(
-      (u) =>
-        u.username === String(username).trim() &&
-        u.password === String(password).trim()
+      (u) => u.username === String(username).trim() && u.password === String(password).trim()
     );
-    if (!user) {
-      return { ok: false, message: 'Invalid credentials' };
-    }
+
+    if (!user) return { ok: false, message: 'Invalid credentials' };
 
     setState((prev) => ({
       ...prev,
       currentUser: { username: user.username, role: user.role },
       currentRole: user.role,
-      currentHrCode: user.role === 'HR' || user.role === 'ADMIN'
-        ? user.username
-        : ''
+      currentHrCode: user.role === 'HR' || user.role === 'ADMIN' ? user.username : '',
     }));
 
     return { ok: true, message: 'Login successful', role: user.role };
@@ -175,249 +202,200 @@ export function HRProvider({ children }) {
       ...prev,
       currentUser: null,
       currentRole: 'GUEST',
-      currentHrCode: ''
+      currentHrCode: '',
     }));
   };
 
-  const processEntry = (code) => {
-    const emp = employeeMap.get(String(code).trim());
-    if (!emp)
-      return {
-        ok: false,
-        text: 'Employee code not found.',
-        type: 'error'
-      };
+  const addLogRow = (row) => {
+    setState((prev) => ({
+      ...prev,
+      logs: [row, ...prev.logs],
+    }));
+  };
 
-    const already = activeEntries.some(
-      (e) => String(e.code).trim() === String(emp.code).trim()
-    );
-    if (already)
-      return {
-        ok: false,
-        duplicate: true,
-        text: 'Already scanned today.',
-        type: 'warn'
-      };
+  const refreshAfterWrite = async () => {
+    await fetchAllDataFromAPI();
+  };
+
+  const processEntry = async (code) => {
+    const emp = employeeMap.get(String(code).trim());
+    if (!emp) return { ok: false, text: 'Employee code not found.', type: 'error' };
+
+    const already = activeEntries.some((e) => String(e.code).trim() === String(emp.code).trim());
+    if (already) return { ok: false, duplicate: true, text: 'Already scanned today.', type: 'warn' };
 
     const todayDay = dayName(state.selectedDate);
     const now = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(
-      now.getMinutes()
-    ).padStart(2, '0')}`;
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     if (emp.weekOff === todayDay) {
-      return {
-        ok: false,
-        weekOff: true,
-        employee: emp,
-        text: `${emp.name} is week off today.`,
-        type: 'warn'
-      };
+      return { ok: false, weekOff: true, employee: emp, text: `${emp.name} is week off today.`, type: 'warn' };
     }
 
     if (!isInShift(hhmm, emp.shift)) {
-      return {
-        ok: false,
-        shiftBlocked: true,
-        employee: emp,
-        text: `${emp.name} is outside shift timing.`,
-        type: 'warn'
-      };
+      return { ok: false, shiftBlocked: true, employee: emp, text: `${emp.name} is outside shift timing.`, type: 'warn' };
     }
 
     const hall = getNextHallForEmployee(emp);
-    const entry = {
-      id: Date.now(),
+    const payload = {
       code: emp.code,
       name: emp.name,
-      weekOff: emp.weekOff,
+      designation: emp.designation || '',
+      week_off: emp.weekOff,
       shift: emp.shift,
-      hallId: hall.id,
-      hallName: hall.name,
-      status: 'Present',
+      hall_id: hall?.id || '',
+      hall_name: hall?.name || '',
       source: 'SCAN',
-      day: todayDay,
-      date: `${state.selectedDate}T${now
-        .toTimeString()
-        .slice(0, 8)}`,
-      time: nowTime(),
-      hrCode: '',
-      hrAction: '',
-      overrideReason: ''
+      hr_code: '',
+      hr_action: '',
+      override_reason: '',
     };
 
-    setState((prev) => ({
-      ...prev,
-      entries: [entry, ...prev.entries],
-      logs: [
-        {
-          id: entry.id,
-          type: 'SCAN',
-          message: `${emp.name} -> ${hall.name}`,
-          by: state.currentUser?.username || '',
-          employeeCode: emp.code,
-          hallId: hall.id,
-          hallName: hall.name,
-          at: entry.date
-        },
-        ...prev.logs
-      ]
-    }));
+    const apiRes = await hrApi.addEntry(payload);
 
-    return { ok: true, entry, text: `${emp.name} saved in ${hall.name}.` };
-  };
+    if (apiRes.success) {
+      await refreshAfterWrite();
+      addLogRow({
+        id: apiRes.data?.id || Date.now(),
+        type: 'SCAN',
+        message: `${emp.name} -> ${hall?.name || '-'}`,
+        by: state.currentUser?.username || '',
+        employeeCode: emp.code,
+        hallId: hall?.id || '',
+        hallName: hall?.name || '',
+        at: apiRes.data?.date || new Date().toISOString(),
+      });
 
-  const hrOverrideEntry = ({ code, hallId, reason }) => {
-    const emp = employeeMap.get(String(code).trim());
-    const hall = state.halls.find((h) => h.id === hallId);
-
-    if (!emp || !hall || !reason)
-      return { ok: false, text: 'Invalid override data.', type: 'error' };
-    if (!(state.currentRole === 'HR' || state.currentRole === 'ADMIN'))
-      return { ok: false, text: 'HR/Admin login required.', type: 'error' };
-
-    const already = activeEntries.find(
-      (e) => String(e.code).trim() === String(emp.code).trim()
-    );
-
-    const todayDay = dayName(state.selectedDate);
-    const now = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(
-      now.getMinutes()
-    ).padStart(2, '0')}`;
-
-    const isWeekOff = emp.weekOff === todayDay;
-    const outOfShift = !isInShift(hhmm, emp.shift);
-
-    const baseReason = reason || '';
-    const reasonTag =
-      baseReason +
-      (isWeekOff ? ' | WEEK_OFF' : '') +
-      (outOfShift ? ' | OUT_OF_SHIFT' : '');
-
-    const entry = {
-      id: Date.now(),
-      code: emp.code,
-      name: emp.name,
-      weekOff: emp.weekOff,
-      shift: emp.shift,
-      hallId: hall.id,
-      hallName: hall.name,
-      status: 'Present',
-      source: 'HR_OVERRIDE',
-      day: todayDay,
-      date: `${state.selectedDate}T${now
-        .toTimeString()
-        .slice(0, 8)}`,
-      time: nowTime(),
-      hrCode: state.currentUser?.username || '',
-      hrAction: already ? 'MOVE_TO_OTHER_HALL' : 'FORCE_ENTRY',
-      overrideReason: reasonTag
-    };
-
-    setState((prev) => ({
-      ...prev,
-      entries: already
-        ? prev.entries.map((e) => (e.id === already.id ? entry : e))
-        : [entry, ...prev.entries],
-      logs: [
-        {
-          id: entry.id,
-          type: 'HR_OVERRIDE',
-          message:
-            `${emp.name} -> ${hall.name} | ${baseReason}` +
-            (isWeekOff ? ' | WEEK_OFF' : '') +
-            (outOfShift ? ' | OUT_OF_SHIFT' : ''),
-          by: state.currentUser?.username || '',
-          employeeCode: emp.code,
-          hallId: hall.id,
-          hallName: hall.name,
-          overrideReason: entry.overrideReason,
-          at: entry.date
-        },
-        ...prev.logs
-      ]
-    }));
-
-    return { ok: true, entry, text: `HR override saved for ${emp.name}.` };
-  };
-
-  const moveEmployeeToHall = ({ code, hallId, reason }) => {
-    const emp = employeeMap.get(String(code).trim());
-    const hall = state.halls.find((h) => h.id === hallId);
-
-    if (!emp || !hall || !reason)
-      return { ok: false, text: 'Invalid move data.', type: 'error' };
-    if (!(state.currentRole === 'HR' || state.currentRole === 'ADMIN'))
-      return { ok: false, text: 'HR/Admin login required.', type: 'error' };
-
-    const idx = state.entries.findIndex(
-      (e) =>
-        dateKey(e.date) === state.selectedDate &&
-        String(e.code).trim() === String(emp.code).trim()
-    );
-
-    if (idx === -1) {
-      return hrOverrideEntry({ code: emp.code, hallId, reason });
+      return { ok: true, entry: apiRes.data, text: `${emp.name} saved in ${hall?.name || '-'}.` };
     }
 
+    return { ok: false, text: apiRes.error || 'Failed to save entry', type: 'error' };
+  };
+
+  const hrOverrideEntry = async ({ code, hallId, reason }) => {
+    const emp = employeeMap.get(String(code).trim());
+    const hall = state.halls.find((h) => String(h.id) === String(hallId));
+
+    if (!emp || !hall || !reason) return { ok: false, text: 'Invalid override data.', type: 'error' };
+    if (!canOverride) return { ok: false, text: 'HR/Admin login required.', type: 'error' };
+
     const todayDay = dayName(state.selectedDate);
     const now = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(
-      now.getMinutes()
-    ).padStart(2, '0')}`;
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const isWeekOff = emp.weekOff === todayDay;
     const outOfShift = !isInShift(hhmm, emp.shift);
-
-    const baseReason = reason || '';
     const reasonTag =
-      baseReason +
+      String(reason || '') +
       (isWeekOff ? ' | WEEK_OFF' : '') +
       (outOfShift ? ' | OUT_OF_SHIFT' : '');
 
-    const updated = {
-      ...state.entries[idx],
-      hallId: hall.id,
-      hallName: hall.name,
+    const payload = {
+      code: emp.code,
+      name: emp.name,
+      designation: emp.designation || '',
+      week_off: emp.weekOff,
+      shift: emp.shift,
+      hall_id: hall.id,
+      hall_name: hall.name,
+      source: 'HR_OVERRIDE',
+      hr_code: state.currentUser?.username || '',
+      hr_action: 'FORCE_ENTRY',
+      override_reason: reasonTag,
+    };
+
+    const apiRes = await hrApi.addEntry(payload);
+
+    if (apiRes.success) {
+      await refreshAfterWrite();
+      addLogRow({
+        id: apiRes.data?.id || Date.now(),
+        type: 'HR_OVERRIDE',
+        message: `${emp.name} -> ${hall.name} | ${reasonTag}`,
+        by: state.currentUser?.username || '',
+        employeeCode: emp.code,
+        hallId: hall.id,
+        hallName: hall.name,
+        overrideReason: apiRes.data?.override_reason || reasonTag,
+        at: apiRes.data?.date || new Date().toISOString(),
+      });
+
+      return { ok: true, entry: apiRes.data, text: `HR override saved for ${emp.name}.` };
+    }
+
+    return { ok: false, text: apiRes.error || 'Failed', type: 'error' };
+  };
+
+  const moveEmployeeToHall = async ({ code, hallId, reason }) => {
+    const emp = employeeMap.get(String(code).trim());
+    const hall = state.halls.find((h) => String(h.id) === String(hallId));
+
+    if (!emp || !hall || !reason) return { ok: false, text: 'Invalid move data.', type: 'error' };
+    if (!canOverride) return { ok: false, text: 'HR/Admin login required.', type: 'error' };
+
+    const todayDay = dayName(state.selectedDate);
+    const now = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const isWeekOff = emp.weekOff === todayDay;
+    const outOfShift = !isInShift(hhmm, emp.shift);
+    const reasonTag =
+      String(reason || '') +
+      (isWeekOff ? ' | WEEK_OFF' : '') +
+      (outOfShift ? ' | OUT_OF_SHIFT' : '');
+
+    const payload = {
+      code: emp.code,
+      name: emp.name,
+      designation: emp.designation || '',
+      week_off: emp.weekOff,
+      shift: emp.shift,
+      hall_id: hall.id,
+      hall_name: hall.name,
       source: 'HR_TRANSFER',
-      hrCode: state.currentUser?.username || '',
-      hrAction: 'MOVE_TO_OTHER_HALL',
-      overrideReason: reasonTag
+      hr_code: state.currentUser?.username || '',
+      hr_action: 'MOVE_TO_OTHER_HALL',
+      override_reason: reasonTag,
     };
 
-    setState((prev) => {
-      const nextEntries = [...prev.entries];
-      nextEntries[idx] = updated;
+    const apiRes = await hrApi.addEntry(payload);
 
-      return {
-        ...prev,
-        entries: nextEntries,
-        logs: [
-          {
-            id: Date.now(),
-            type: 'HR_TRANSFER',
-            message:
-              `${emp.name} -> ${hall.name} | ${baseReason}` +
-              (isWeekOff ? ' | WEEK_OFF' : '') +
-              (outOfShift ? ' | OUT_OF_SHIFT' : ''),
-            by: state.currentUser?.username || '',
-            employeeCode: emp.code,
-            hallId: hall.id,
-            hallName: hall.name,
-            overrideReason: updated.overrideReason,
-            at: new Date().toISOString()
-          },
-          ...prev.logs
-        ]
-      };
-    });
+    if (apiRes.success) {
+      const newEntry = apiRes.data;
 
-    return {
-      ok: true,
-      entry: updated,
-      text: `${emp.name} moved to ${hall.name}.`
-    };
+      setState((prev) => {
+        const filteredEntries = prev.entries.filter(
+          (e) =>
+            !(
+              dateKey(e.date) === state.selectedDate &&
+              String(e.code).trim() === String(emp.code).trim()
+            )
+        );
+
+        return {
+          ...prev,
+          entries: [newEntry, ...filteredEntries],
+        };
+      });
+
+      addLogRow({
+        id: newEntry.id || Date.now(),
+        type: 'HR_TRANSFER',
+        message: `${emp.name} -> ${hall.name} | ${reasonTag}`,
+        by: state.currentUser?.username || '',
+        employeeCode: emp.code,
+        hallId: hall.id,
+        hallName: hall.name,
+        overrideReason: newEntry.override_reason || reasonTag,
+        at: newEntry.date || new Date().toISOString(),
+      });
+
+      await refreshAfterWrite();
+
+      return { ok: true, entry: newEntry, text: `${emp.name} moved to ${hall.name}.` };
+    }
+
+    return { ok: false, text: apiRes.error || 'Failed', type: 'error' };
   };
 
   const getAttendanceTracker = () => {
@@ -441,7 +419,7 @@ export function HRProvider({ children }) {
         presentDays: uniqueDays.size,
         absentDays,
         lastSeen,
-        totalRecords: dates.length
+        totalRecords: dates.length,
       };
     });
   };
@@ -456,13 +434,15 @@ export function HRProvider({ children }) {
         hallUsage,
         totals,
         activeEntries,
+        canOverride,
         login,
         logout,
         processEntry,
         hrOverrideEntry,
         moveEmployeeToHall,
         getAttendanceTracker,
-        resetAll
+        resetAll,
+        fetchAllDataFromAPI,
       }}
     >
       {children}

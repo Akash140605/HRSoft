@@ -1,33 +1,67 @@
-import React, { useMemo, useState } from 'react';
-import { Plus, Trash2, Building2, Users2, CalendarRange, ChevronDown, ChevronUp, Palette } from 'lucide-react';
-import { useHR } from '../context/HRContext';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Building2,
+  Users2,
+  CalendarRange,
+  ChevronDown,
+  ChevronUp,
+  Palette,
+  Loader2,
+} from "lucide-react";
+import { useHR } from "../context/HRContext";
+import hrApi from "../api/hrApi";
 
 const colorMap = {
-  teal: 'bg-teal-500',
-  blue: 'bg-blue-500',
-  violet: 'bg-violet-500',
-  amber: 'bg-amber-500',
-  slate: 'bg-slate-500'
+  teal: "bg-teal-500",
+  blue: "bg-blue-500",
+  violet: "bg-violet-500",
+  amber: "bg-amber-500",
+  slate: "bg-slate-500",
 };
 
 const accentMap = {
-  teal: { ring: 'ring-teal-500/20', border: 'border-teal-500', soft: 'bg-teal-50 text-teal-700' },
-  blue: { ring: 'ring-[#23205C]/15', border: 'border-[#23205C]', soft: 'bg-[#23205C]/5 text-[#23205C]' },
-  violet: { ring: 'ring-violet-500/20', border: 'border-violet-500', soft: 'bg-violet-50 text-violet-700' },
-  amber: { ring: 'ring-amber-500/20', border: 'border-amber-500', soft: 'bg-amber-50 text-amber-700' },
-  slate: { ring: 'ring-slate-400/20', border: 'border-slate-500', soft: 'bg-slate-100 text-slate-700' }
+  teal: { ring: "ring-teal-500/20", border: "border-teal-500", soft: "bg-teal-50 text-teal-700" },
+  blue: { ring: "ring-[#23205C]/15", border: "border-[#23205C]", soft: "bg-[#23205C]/5 text-[#23205C]" },
+  violet: { ring: "ring-violet-500/20", border: "border-violet-500", soft: "bg-violet-50 text-violet-700" },
+  amber: { ring: "ring-amber-500/20", border: "border-amber-500", soft: "bg-amber-50 text-amber-700" },
+  slate: { ring: "ring-slate-400/20", border: "border-slate-500", soft: "bg-slate-100 text-slate-700" },
 };
 
 export default function HallManager() {
-  const ctx = useHR();
-  const hallSummary = Array.isArray(ctx.hallSummary) ? ctx.hallSummary : [];
-  const SHIFT_OPTIONS = Array.isArray(ctx.SHIFT_OPTIONS) ? ctx.SHIFT_OPTIONS : [];
-  const entriesForSelectedDate = Array.isArray(ctx.entriesForSelectedDate) ? ctx.entriesForSelectedDate : [];
-  const updateHall = ctx.updateHall || (() => {});
-  const addHall = ctx.addHall || (() => {});
-  const removeHall = ctx.removeHall || (() => {});
+  const { state, setState, hallUsage, SHIFT_OPTIONS, activeEntries } = useHR();
 
   const [openHallId, setOpenHallId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const fetchHalls = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await hrApi.getHalls();
+      if (res.success) {
+        setState((prev) => ({
+          ...prev,
+          halls: Array.isArray(res.data) ? res.data : [],
+        }));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [setState]);
+
+  useEffect(() => {
+    fetchHalls();
+  }, [fetchHalls, refreshKey]);
+
+  const hallSummary = useMemo(() => {
+    const usageMap = new Map((hallUsage || []).map((h) => [String(h.id), h]));
+    return (state.halls || []).map((h) => ({
+      ...h,
+      ...(usageMap.get(String(h.id)) || {}),
+    }));
+  }, [hallUsage, state.halls]);
+
+  const entriesForSelectedDate = activeEntries || [];
 
   const shiftSummary = useMemo(() => {
     return SHIFT_OPTIONS.map((shift) => {
@@ -44,6 +78,29 @@ export default function HallManager() {
     setOpenHallId((prev) => (prev === hallId ? null : hallId));
   };
 
+  const updateHall = async (hallId, updates) => {
+    setState((prev) => ({
+      ...prev,
+      halls: prev.halls.map((h) => (h.id === hallId ? { ...h, ...updates } : h)),
+    }));
+
+    setLoading(true);
+    try {
+      const current = state.halls.find((h) => String(h.id) === String(hallId));
+      const payload = {
+        name: updates.name ?? current?.name ?? "",
+        capacity: updates.capacity ?? current?.capacity ?? 50,
+        color: updates.color ?? current?.color ?? "blue",
+      };
+
+      const res = await hrApi.updateHall(hallId, payload);
+      if (res.success) setRefreshKey((k) => k + 1);
+      else alert(res.error || "Hall update failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="overflow-hidden border-2 border-slate-200 bg-white shadow-xl">
       <div className="border-b border-slate-200 bg-gradient-to-r from-[#23205C] to-[#E0222A] px-5 py-4 text-white">
@@ -55,18 +112,9 @@ export default function HallManager() {
             </div>
             <h2 className="mt-3 text-xl font-black tracking-tight sm:text-2xl">Hall Manager</h2>
             <p className="mt-2 max-w-2xl text-sm text-white/80">
-              Hall boxes par click karke us hall ki full details, capacity, occupancy aur edit controls open karo.
+              Real database halls, live occupancy, and edit controls.
             </p>
           </div>
-
-          <button
-            className="inline-flex items-center gap-2 border-2 border-white bg-white px-4 py-2 text-sm font-semibold text-[#23205C] transition hover:-translate-y-0.5 hover:shadow-lg"
-            onClick={addHall}
-            type="button"
-          >
-            <Plus className="h-4 w-4" />
-            Add hall
-          </button>
         </div>
       </div>
 
@@ -150,7 +198,7 @@ export default function HallManager() {
               const hallName = hall.name || `Hall ${index + 1}`;
               const isOpen = openHallId === hall.id;
               const accent = accentMap[hall.color] || accentMap.blue;
-              const styleClass = isOpen ? `${accent.border} ${accent.ring} shadow-lg` : 'border-slate-200 shadow-sm';
+              const styleClass = isOpen ? `${accent.border} ${accent.ring} shadow-lg` : "border-slate-200 shadow-sm";
 
               return (
                 <div key={hall.id} className={`overflow-hidden border-2 bg-white transition ${styleClass}`}>
@@ -173,7 +221,9 @@ export default function HallManager() {
 
                       <div className="flex items-center gap-2 text-slate-600">
                         <div className="text-right">
-                          <div className="text-sm font-bold text-slate-900">{used} / {capacity}</div>
+                          <div className="text-sm font-bold text-slate-900">
+                            {used} / {capacity}
+                          </div>
                           <div className="text-xs text-slate-500">Used / Capacity</div>
                         </div>
                         {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -188,7 +238,10 @@ export default function HallManager() {
                         <span>{Math.round(percentage)}%</span>
                       </div>
                       <div className="h-2 overflow-hidden bg-slate-200">
-                        <div className={`h-full ${colorMap[hall.color] || 'bg-[#23205C]'}`} style={{ width: `${percentage}%` }} />
+                        <div
+                          className={`h-full ${colorMap[hall.color] || "bg-[#23205C]"}`}
+                          style={{ width: `${percentage}%` }}
+                        />
                       </div>
                     </div>
 
@@ -197,10 +250,11 @@ export default function HallManager() {
                         <div>
                           <label className="mb-1 block text-xs font-medium text-slate-600">Hall name</label>
                           <input
-                            value={hall.name}
+                            value={hall.name || ""}
                             onChange={(e) => updateHall(hall.id, { name: e.target.value })}
                             className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
                             placeholder="Hall name"
+                            disabled={loading}
                           />
                         </div>
 
@@ -209,35 +263,34 @@ export default function HallManager() {
                           <input
                             type="number"
                             min="0"
-                            value={hall.capacity}
+                            value={hall.capacity ?? 0}
                             onChange={(e) => updateHall(hall.id, { capacity: Number(e.target.value) })}
                             className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
                             placeholder="Capacity"
+                            disabled={loading}
                           />
                         </div>
 
                         <div>
                           <label className="mb-1 block text-xs font-medium text-slate-600">Color</label>
                           <select
-                            value={hall.color || 'blue'}
+                            value={hall.color || "blue"}
                             onChange={(e) => updateHall(hall.id, { color: e.target.value })}
                             className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
+                            disabled={loading}
                           >
                             {Object.keys(colorMap).map((c) => (
-                              <option key={c} value={c}>{c}</option>
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
                             ))}
                           </select>
                         </div>
 
                         <div className="flex items-end">
-                          <button
-                            className="inline-flex w-full items-center justify-center gap-2 border-2 border-[#E0222A] bg-[#E0222A] px-4 py-2 font-semibold text-white shadow-lg shadow-[#E0222A]/20 transition hover:-translate-y-0.5"
-                            onClick={() => removeHall(hall.id)}
-                            type="button"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Remove
-                          </button>
+                          <div className={`w-full border-2 px-4 py-2 text-center text-sm font-semibold ${accent.soft}`}>
+                            Editable fields
+                          </div>
                         </div>
                       </div>
                     )}

@@ -1,75 +1,96 @@
-CREATE DATABASE IF NOT EXISTS hr_gate_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE hr_gate_system;
+-- HR System Database Schema with designation support
+-- Run this in MySQL to create all tables
 
+-- Create database
+CREATE DATABASE IF NOT EXISTS hr_system_db;
+USE hr_system_db;
+
+-- Create employees table
 CREATE TABLE IF NOT EXISTS employees (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(120) NOT NULL,
-  code VARCHAR(50) NOT NULL UNIQUE,
-  week_off VARCHAR(20) NOT NULL DEFAULT 'Sunday',
-  shift VARCHAR(10) NOT NULL DEFAULT 'A',
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    designation VARCHAR(100),
+    week_off VARCHAR(20) DEFAULT 'Sunday',
+    shift VARCHAR(10) DEFAULT 'A',
+    hall_id VARCHAR(50) DEFAULT 'H1',
+    hall_name VARCHAR(100) DEFAULT 'Hall 1',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_code (code),
+    INDEX idx_shift (shift),
+    INDEX idx_hall (hall_id)
+);
 
+-- Create halls table
 CREATE TABLE IF NOT EXISTS halls (
-  id VARCHAR(80) PRIMARY KEY,
-  name VARCHAR(120) NOT NULL,
-  capacity INT NOT NULL DEFAULT 0,
-  color VARCHAR(30) NOT NULL DEFAULT 'slate',
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    capacity INT DEFAULT 50,
+    color VARCHAR(20) DEFAULT 'blue',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
 
-CREATE TABLE IF NOT EXISTS attendance_entries (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  employee_id INT DEFAULT NULL,
-  code VARCHAR(50) NOT NULL,
-  name VARCHAR(120) NOT NULL,
-  week_off VARCHAR(20) NOT NULL DEFAULT '-',
-  shift VARCHAR(10) NOT NULL DEFAULT '-',
-  hall_id VARCHAR(80) DEFAULT NULL,
-  hall_name VARCHAR(120) DEFAULT 'Unnamed Hall',
-  status ENUM('Present','WO','L','A') NOT NULL DEFAULT 'Present',
-  source ENUM('SCAN_OR_MANUAL','HR_OVERRIDE') NOT NULL DEFAULT 'SCAN_OR_MANUAL',
-  override_reason TEXT DEFAULT NULL,
-  overridden_by VARCHAR(80) DEFAULT NULL,
-  day VARCHAR(20) NOT NULL,
-  time VARCHAR(20) NOT NULL,
-  entry_date DATE NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_code_date (code, entry_date),
-  INDEX idx_entry_date (entry_date),
-  INDEX idx_employee_id (employee_id),
-  INDEX idx_hall_id (hall_id),
-  CONSTRAINT fk_attendance_employee
-    FOREIGN KEY (employee_id) REFERENCES employees(id)
-    ON DELETE SET NULL
-    ON UPDATE CASCADE,
-  CONSTRAINT fk_attendance_hall
-    FOREIGN KEY (hall_id) REFERENCES halls(id)
-    ON DELETE SET NULL
-    ON UPDATE CASCADE
-) ENGINE=InnoDB;
+-- Create entries table
+CREATE TABLE IF NOT EXISTS entries (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    designation VARCHAR(100),
+    week_off VARCHAR(20),
+    shift VARCHAR(10),
+    hall_id VARCHAR(50),
+    hall_name VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'Present',
+    source VARCHAR(30) DEFAULT 'SCAN',
+    day VARCHAR(20),
+    date DATE NOT NULL,
+    time VARCHAR(10),
+    hr_code VARCHAR(50),
+    hr_action VARCHAR(50),
+    override_reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_code (code),
+    INDEX idx_date (date),
+    INDEX idx_shift (shift),
+    INDEX idx_hall (hall_id),
+    INDEX idx_source (source)
+);
 
-CREATE TABLE IF NOT EXISTS activity_logs (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  message VARCHAR(255) NOT NULL,
-  created_at DATETIME NOT NULL,
-  related_entry_id BIGINT DEFAULT NULL,
-  INDEX idx_related_entry (related_entry_id),
-  CONSTRAINT fk_log_entry
-    FOREIGN KEY (related_entry_id) REFERENCES attendance_entries(id)
-    ON DELETE SET NULL
-    ON UPDATE CASCADE
-) ENGINE=InnoDB;
+-- Create logs table
+CREATE TABLE IF NOT EXISTS logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    type VARCHAR(30) NOT NULL,
+    message TEXT NOT NULL,
+    by VARCHAR(50),
+    employee_code VARCHAR(50),
+    hall_id VARCHAR(50),
+    hall_name VARCHAR(100),
+    override_reason TEXT,
+    at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_type (type),
+    INDEX idx_employee (employee_code),
+    INDEX idx_at (at)
+);
 
-CREATE TABLE IF NOT EXISTS settings (
-  `key` VARCHAR(60) PRIMARY KEY,
-  `value` TEXT NOT NULL
-) ENGINE=InnoDB;
+-- Create users table
+CREATE TABLE IF NOT EXISTS users (
+    username VARCHAR(50) PRIMARY KEY,
+    password VARCHAR(100) NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-INSERT INTO settings (`key`, `value`) VALUES
-('current_user_role', 'HR')
-ON DUPLICATE KEY UPDATE `value` = VALUES(`value`);
+-- Insert default users
+INSERT IGNORE INTO users (username, password, role) VALUES 
+    ('user1', 'user123', 'USER'),
+    ('hr1', 'hr123', 'HR'),
+    ('admin1', 'admin123', 'ADMIN');
+
+-- Insert default halls
+INSERT IGNORE INTO halls (id, name, capacity, color) VALUES 
+    ('H1', 'Hall 1', 50, 'blue'),
+    ('H2', 'Hall 2', 50, 'teal'),
+    ('H3', 'Hall 3', 50, 'violet'),
+    ('H3', 'Hall 4', 50, 'violet');

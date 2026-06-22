@@ -1,25 +1,46 @@
 <?php
-declare(strict_types=1);
+// database.php - MySQL Database Configuration for HR System
 
-$host = 'localhost';
-$dbname = 'hr_gate_system';
-$username = 'root';
-$password = '';
-$charset = 'utf8mb4';
+class Database {
+    private $host = "localhost";
+    private $db_name = "hrsystem_db";
+    private $username = "root";
+    private $password = "";
+    public $conn;
+    public $error;
 
-$dsn = "mysql:host=$host;dbname=$dbname;charset=$charset";
+    // Get database connection
+    public function getConnection() {
+        $this->conn = null;
 
-$options = [
-  PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-  PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-  PDO::ATTR_EMULATE_PREPARES => false,
-];
+        try {
+            $this->conn = new mysqli($this->host, $this->username, $this->password, $this->db_name);
+            
+            if ($this->conn->connect_error) {
+                throw new Exception("Connection failed: " . $this->conn->connect_error);
+            }
+            
+            $this->conn->set_charset("utf8");
+        } catch (Exception $exception) {
+            $this->error = $exception->getMessage();
+            return null;
+        }
 
-try {
-  $pdo = new PDO($dsn, $username, $password, $options);
-} catch (PDOException $e) {
-  http_response_code(500);
-  header('Content-Type: application/json');
-  echo json_encode(['success' => false, 'message' => 'Database connection failed']);
-  exit;
+        return $this->conn;
+    }
+
+    // Close connection
+    public function closeConnection() {
+        if ($this->conn) {
+            $this->conn->close();
+        }
+    }
 }
+
+// For direct usage:
+// $db = new Database();
+// $conn = $db->getConnection();
+// if (!$conn) { die("Database connection failed: " . $db->error); }
+// ... use $conn for queries ...
+// $db->closeConnection();
+?>

@@ -1,20 +1,41 @@
-import React, { useMemo, useState } from 'react';
-import { Download, Search } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Download, Search, Loader2 } from 'lucide-react';
 import { useHR } from '../context/HRContext';
+import hrApi from '../api/hrApi';
 
 export default function HRLogsPanel() {
-  const { state } = useHR();
+  const { state, setState } = useHR();
   const [query, setQuery] = useState('');
   const [hrCode, setHrCode] = useState('');
   const [employeeCode, setEmployeeCode] = useState('');
   const [actionType, setActionType] = useState('');
   const [selectedHrId, setSelectedHrId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Sirf jahan by (HR code) hai, wahi HR ID list me aayegi
+  const fetchLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await hrApi.getLogs();
+      if (res.success) {
+        setState((prev) => ({
+          ...prev,
+          logs: Array.isArray(res.data) ? res.data : [],
+        }));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [setState]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs, refreshKey]);
+
   const hrIds = useMemo(() => {
     const ids = new Set();
     (state.logs || []).forEach((log) => {
-      const id = String(log.by || '').trim();
+      const id = String(log.by || log.hrCode || '').trim();
       if (id) ids.add(id);
     });
     return Array.from(ids).sort();
@@ -24,12 +45,12 @@ export default function HRLogsPanel() {
     const q = query.trim().toLowerCase();
 
     return (state.logs || []).filter((log) => {
-      const logHr = String(log.by || '').trim();           // HR ID
+      const logHr = String(log.by || log.hrCode || '').trim();
       const logEmp = String(log.employeeCode || log.code || '').trim();
       const text = `${log.type || ''} ${log.message || ''} ${logHr} ${logEmp} ${log.hallName || ''} ${log.overrideReason || ''}`.toLowerCase();
 
-      const hrOk = !hrCode || logHr === hrCode.trim();          // manual input filter
-      const selectedHrOk = !selectedHrId || logHr === selectedHrId; // dropdown filter
+      const hrOk = !hrCode || logHr === hrCode.trim();
+      const selectedHrOk = !selectedHrId || logHr === selectedHrId;
       const empOk = !employeeCode || logEmp === employeeCode.trim();
       const actOk = !actionType || String(log.type || '').trim() === actionType.trim();
       const qOk = !q || text.includes(q);
@@ -39,7 +60,7 @@ export default function HRLogsPanel() {
   }, [actionType, employeeCode, hrCode, query, selectedHrId, state.logs]);
 
   const exportCsv = () => {
-    const headers = ['at', 'type', 'message', 'by', 'employeeCode', 'hallId', 'hallName', 'overrideReason'];
+    const headers = ['at', 'type', 'message', 'by', 'employee_code', 'hall_id', 'hall_name', 'override_reason'];
     const csv = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? ''))]
       .map((line) => line.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(','))
       .join('\n');
@@ -53,8 +74,16 @@ export default function HRLogsPanel() {
     URL.revokeObjectURL(url);
   };
 
+  const clearFilters = () => {
+    setQuery('');
+    setHrCode('');
+    setEmployeeCode('');
+    setActionType('');
+    setSelectedHrId('');
+  };
+
   return (
-    <div className="card overflow-hidden border border-slate-200 bg-white shadow-xl">
+    <div className="overflow-hidden border border-slate-200 bg-white shadow-xl">
       <div className="border-b border-slate-200 bg-white px-5 py-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -63,10 +92,16 @@ export default function HRLogsPanel() {
               HR ID-wise actions, employee-wise filters, and audit tracking.
             </p>
           </div>
-          <button className="btn-secondary" type="button" onClick={exportCsv}>
-            <Download className="h-4 w-4" />
-            Export CSV
-          </button>
+
+          <div className="flex gap-2">
+            <button className="btn-secondary" type="button" onClick={clearFilters}>
+              Clear Filters
+            </button>
+            <button className="btn-secondary" type="button" onClick={exportCsv}>
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
+          </div>
         </div>
       </div>
 
@@ -76,7 +111,7 @@ export default function HRLogsPanel() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               className="input w-full pl-9"
-              placeholder="Search logs"
+              placeholder="Search logs (type, message, HR, employee, hall)"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -135,8 +170,16 @@ export default function HRLogsPanel() {
               <th className="sticky top-0 bg-slate-50">Reason</th>
             </tr>
           </thead>
+
           <tbody>
-            {rows.length ? (
+            {loading ? (
+              <tr>
+                <td colSpan="7" className="py-10 text-center text-sm text-slate-500">
+                  <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                  Loading logs...
+                </td>
+              </tr>
+            ) : rows.length ? (
               rows.map((row) => (
                 <tr key={row.id}>
                   <td>{row.at ? String(row.at).slice(0, 19).replace('T', ' ') : '-'}</td>

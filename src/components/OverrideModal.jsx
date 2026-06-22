@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, ShieldAlert, Save } from 'lucide-react';
+import { X, ShieldAlert, Save, Loader2 } from 'lucide-react';
 import { useHR } from '../context/HRContext';
 
 const emptyForm = {
@@ -10,12 +10,13 @@ const emptyForm = {
   weekOff: '',
   overrideReason: '',
   hallName: 'HR Override',
-  overriddenBy: 'HR'
+  overriddenBy: 'HR',
 };
 
 export default function OverrideModal({ open, onClose, employee }) {
   const { overrideEntry, SHIFT_OPTIONS } = useHR();
   const [form, setForm] = useState(emptyForm);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -27,17 +28,30 @@ export default function OverrideModal({ open, onClose, employee }) {
         weekOff: employee?.weekOff || '',
         overrideReason: '',
         hallName: 'HR Override',
-        overriddenBy: 'HR'
+        overriddenBy: 'HR',
       });
+    } else {
+      setForm(emptyForm);
     }
   }, [open, employee]);
 
   if (!open) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const ok = overrideEntry(form);
-    if (ok) onClose();
+    if (!form.code.trim() || !form.name.trim() || !form.shift.trim() || !form.overrideReason.trim()) {
+      alert('Code, name, shift aur reason required hain.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await overrideEntry(form);
+      if (res?.ok) onClose();
+      else alert(res?.text || 'Override failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -49,9 +63,17 @@ export default function OverrideModal({ open, onClose, employee }) {
               <ShieldAlert className="h-5 w-5 text-amber-600" />
               HR Override
             </h3>
-            <p className="mt-1 text-sm text-slate-500">Rejected punch ko manual override karke save karo.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Rejected punch ko manual override karke save karo.
+            </p>
           </div>
-          <button onClick={onClose} className="rounded-none p-2 text-slate-500 hover:bg-slate-100" type="button">
+
+          <button
+            onClick={onClose}
+            className="rounded-none p-2 text-slate-500 hover:bg-slate-100"
+            type="button"
+            disabled={loading}
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -63,6 +85,7 @@ export default function OverrideModal({ open, onClose, employee }) {
               className="input"
               value={form.code}
               onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))}
+              disabled={loading}
             />
           </div>
 
@@ -72,6 +95,7 @@ export default function OverrideModal({ open, onClose, employee }) {
               className="input"
               value={form.name}
               onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+              disabled={loading}
             />
           </div>
 
@@ -81,6 +105,7 @@ export default function OverrideModal({ open, onClose, employee }) {
               className="input"
               value={form.shift}
               onChange={(e) => setForm((p) => ({ ...p, shift: e.target.value }))}
+              disabled={loading}
             >
               <option value="" disabled>
                 Select shift
@@ -100,6 +125,7 @@ export default function OverrideModal({ open, onClose, employee }) {
               type="time"
               value={form.time}
               onChange={(e) => setForm((p) => ({ ...p, time: e.target.value }))}
+              disabled={loading}
             />
           </div>
 
@@ -110,6 +136,7 @@ export default function OverrideModal({ open, onClose, employee }) {
               value={form.overrideReason}
               onChange={(e) => setForm((p) => ({ ...p, overrideReason: e.target.value }))}
               placeholder="Why override is needed?"
+              disabled={loading}
             />
           </div>
 
@@ -119,6 +146,7 @@ export default function OverrideModal({ open, onClose, employee }) {
               className="input"
               value={form.hallName}
               onChange={(e) => setForm((p) => ({ ...p, hallName: e.target.value }))}
+              disabled={loading}
             />
           </div>
 
@@ -128,15 +156,16 @@ export default function OverrideModal({ open, onClose, employee }) {
               className="input"
               value={form.overriddenBy}
               onChange={(e) => setForm((p) => ({ ...p, overriddenBy: e.target.value }))}
+              disabled={loading}
             />
           </div>
 
           <div className="md:col-span-2 flex justify-end gap-2 border-t border-slate-200 pt-4">
-            <button type="button" className="btn-secondary" onClick={onClose}>
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary">
-              <Save className="h-4 w-4" />
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save override
             </button>
           </div>
