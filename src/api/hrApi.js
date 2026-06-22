@@ -1,5 +1,4 @@
-const API_BASE_URL = '/api/api.php';
-
+const API_BASE_URL = 'https://kushalyouth.com/api/api.php';
 const buildUrl = (endpoint) => {
   const clean = String(endpoint || '').replace(/^\/+/, '');
   return `${API_BASE_URL}?endpoint=${clean}`;
