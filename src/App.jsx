@@ -14,6 +14,7 @@ function DashboardApp() {
   const { state, logout } = useHR();
   const [activeTab, setActiveTab] = useState("scanner");
   const [tabsOpen, setTabsOpen] = useState(false);
+  const [guestTrainingOpen, setGuestTrainingOpen] = useState(false);
 
   const showRoster = state.currentRole === "HR" || state.currentRole === "ADMIN";
   const showHRLogs = state.currentRole === "ADMIN";
@@ -26,6 +27,8 @@ function DashboardApp() {
     if (isGuest) {
       setActiveTab("scanner");
       setTabsOpen(false);
+    } else {
+      setGuestTrainingOpen(false);
     }
   }, [isGuest]);
 
@@ -34,18 +37,24 @@ function DashboardApp() {
       { key: "scanner", label: "Scanner" },
       { key: "training", label: "Training" },
     ];
+
     if (showEntryTable) base.push({ key: "entries", label: "Entries" });
     if (showRoster) base.push({ key: "roster", label: "Roster" });
     if (showHallManager) base.push({ key: "hall", label: "Hall Manager" });
     if (showTracker) base.push({ key: "tracker", label: "Tracker" });
     if (showHRLogs) base.push({ key: "logs", label: "HR Logs" });
+
     return base;
   }, [showEntryTable, showHRLogs, showRoster, showTracker, showHallManager]);
 
   const renderTab = () => {
     switch (activeTab) {
       case "training":
-        return <HRTrainingRoute />;
+        return (
+          <div className="h-screen overflow-hidden">
+            <HRTrainingRoute />
+          </div>
+        );
       case "entries":
         return showEntryTable ? <EntryTable /> : <ScannerPanel />;
       case "roster":
@@ -70,17 +79,43 @@ function DashboardApp() {
   const handleLogout = async () => {
     setTabsOpen(false);
     setActiveTab("scanner");
+    setGuestTrainingOpen(false);
     await logout();
   };
 
+  if (isGuest && guestTrainingOpen) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 md:px-6">
+          <img
+            src="/logod.png"
+            alt="Dixon"
+            className="block h-9 w-auto max-w-[55vw] object-contain sm:h-10 md:h-12"
+          />
+          <button
+            type="button"
+            onClick={() => setGuestTrainingOpen(false)}
+            className="border-2 border-[#23205C] bg-[#23205C] px-4 py-2 text-sm font-semibold text-white"
+          >
+            Back to Login
+          </button>
+        </div>
+
+        <div className="h-[calc(100vh-73px)] overflow-hidden">
+          <HRTrainingRoute />
+        </div>
+      </div>
+    );
+  }
+
   if (isGuest) {
-    return <LoginScreen />;
+    return <LoginScreen onOpenTraining={() => setGuestTrainingOpen(true)} />;
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 overflow-x-hidden overflow-y-auto">
+    <div className="min-h-screen overflow-x-hidden overflow-y-auto bg-slate-50 text-slate-900">
       <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200 bg-white shadow-sm">
-        <div className="flex w-full items-center justify-between px-4 py-3 md:px-6 box-border">
+        <div className="box-border flex w-full items-center justify-between px-4 py-3 md:px-6">
           <img
             src="/logod.png"
             alt="Dixon"
@@ -90,7 +125,7 @@ function DashboardApp() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="md:hidden inline-flex items-center justify-center border-2 border-slate-300 bg-white px-3 py-2 text-slate-700"
+              className="inline-flex items-center justify-center border-2 border-slate-300 bg-white px-3 py-2 text-slate-700 md:hidden"
               onClick={() => setTabsOpen((v) => !v)}
             >
               {tabsOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -98,7 +133,7 @@ function DashboardApp() {
 
             <button
               onClick={handleLogout}
-              className="shrink-0 inline-flex items-center justify-center border-2 border-[#E0222A] bg-[#E0222A] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#E0222A]/25 transition hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98]"
+              className="inline-flex shrink-0 items-center justify-center border-2 border-[#E0222A] bg-[#E0222A] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#E0222A]/25 transition hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98]"
             >
               Logout
             </button>
@@ -116,7 +151,7 @@ function DashboardApp() {
                 key={tab.key}
                 type="button"
                 onClick={() => selectTab(tab.key)}
-                className={`w-full md:w-auto px-4 py-2 text-sm font-semibold transition border-2 ${
+                className={`w-full border-2 px-4 py-2 text-sm font-semibold transition md:w-auto ${
                   activeTab === tab.key
                     ? "border-[#23205C] bg-[#23205C] text-white"
                     : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
@@ -129,7 +164,7 @@ function DashboardApp() {
         </div>
       </header>
 
-      <main className="w-full px-4 py-6 md:px-6 pt-24 md:pt-40">
+      <main className="w-full px-4 py-6 pt-24 md:px-6 md:pt-40">
         <div className="grid grid-cols-1 gap-6">{renderTab()}</div>
       </main>
     </div>

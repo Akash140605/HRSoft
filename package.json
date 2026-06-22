@@ -20,6 +20,7 @@
     "quagga": "^0.12.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-router-dom": "^7.18.0",
     "tailwindcss": "^4.3.1",
     "xlsx": "^0.18.5"
   },
