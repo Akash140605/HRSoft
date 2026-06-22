@@ -315,7 +315,9 @@ export default function EntryTable() {
             <option value="A">A</option>
             <option value="B">B</option>
             <option value="C">C</option>
-            <option value="GENERAL">GENERAL</option>
+             <option value="AA">AA</option>
+            <option value="BB">BB</option>
+         
           </select>
 
           <input
