@@ -3,6 +3,14 @@ import { Download, Search, Loader2 } from 'lucide-react';
 import { useHR } from '../context/HRContext';
 import hrApi from '../api/hrApi';
 
+const getLogValue = (log, keys) => {
+  for (const key of keys) {
+    const val = log?.[key];
+    if (val !== undefined && val !== null && String(val).trim() !== '') return String(val).trim();
+  }
+  return '';
+};
+
 export default function HRLogsPanel() {
   const { state, setState } = useHR();
   const [query, setQuery] = useState('');
@@ -22,6 +30,8 @@ export default function HRLogsPanel() {
           ...prev,
           logs: Array.isArray(res.data) ? res.data : [],
         }));
+      } else {
+        setState((prev) => ({ ...prev, logs: [] }));
       }
     } finally {
       setLoading(false);
@@ -35,7 +45,7 @@ export default function HRLogsPanel() {
   const hrIds = useMemo(() => {
     const ids = new Set();
     (state.logs || []).forEach((log) => {
-      const id = String(log.by || log.hrCode || '').trim();
+      const id = getLogValue(log, ['by', 'hrCode', 'hr_code']);
       if (id) ids.add(id);
     });
     return Array.from(ids).sort();
@@ -45,14 +55,18 @@ export default function HRLogsPanel() {
     const q = query.trim().toLowerCase();
 
     return (state.logs || []).filter((log) => {
-      const logHr = String(log.by || log.hrCode || '').trim();
-      const logEmp = String(log.employeeCode || log.code || '').trim();
-      const text = `${log.type || ''} ${log.message || ''} ${logHr} ${logEmp} ${log.hallName || ''} ${log.overrideReason || ''}`.toLowerCase();
+      const logHr = getLogValue(log, ['by', 'hrCode', 'hr_code']);
+      const logEmp = getLogValue(log, ['employeeCode', 'employee_code', 'code']);
+      const logType = getLogValue(log, ['type']);
+      const logMsg = getLogValue(log, ['message']);
+      const logHall = getLogValue(log, ['hallName', 'hall_name']);
+      const logReason = getLogValue(log, ['overrideReason', 'override_reason']);
+      const text = `${logType} ${logMsg} ${logHr} ${logEmp} ${logHall} ${logReason}`.toLowerCase();
 
       const hrOk = !hrCode || logHr === hrCode.trim();
-      const selectedHrOk = !selectedHrId || logHr === selectedHrId;
+      const selectedHrOk = !selectedHrId || logHr === selectedHrId.trim();
       const empOk = !employeeCode || logEmp === employeeCode.trim();
-      const actOk = !actionType || String(log.type || '').trim() === actionType.trim();
+      const actOk = !actionType || logType === actionType.trim();
       const qOk = !q || text.includes(q);
 
       return hrOk && selectedHrOk && empOk && actOk && qOk;
@@ -61,7 +75,7 @@ export default function HRLogsPanel() {
 
   const exportCsv = () => {
     const headers = ['at', 'type', 'message', 'by', 'employee_code', 'hall_id', 'hall_name', 'override_reason'];
-    const csv = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? ''))]
+    const csv = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? r[h.replace(/_/g, '')] ?? ''))]
       .map((line) => line.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(','))
       .join('\n');
 
@@ -185,16 +199,16 @@ export default function HRLogsPanel() {
                   <td>{row.at ? String(row.at).slice(0, 19).replace('T', ' ') : '-'}</td>
                   <td>
                     <span className="badge border border-slate-300 bg-white text-slate-700">
-                      {row.type || '-'}
+                      {getLogValue(row, ['type']) || '-'}
                     </span>
                   </td>
-                  <td>{row.message || '-'}</td>
+                  <td>{getLogValue(row, ['message']) || '-'}</td>
                   <td className="font-medium text-slate-900">
-                    {row.by || row.hrCode || (row.type === 'SCAN' ? 'SYSTEM' : '-')}
+                    {getLogValue(row, ['by', 'hrCode', 'hr_code']) || (getLogValue(row, ['type']) === 'SCAN' ? 'SYSTEM' : '-')}
                   </td>
-                  <td>{row.employeeCode || row.code || '-'}</td>
-                  <td>{row.hallName || '-'}</td>
-                  <td>{row.overrideReason || '-'}</td>
+                  <td>{getLogValue(row, ['employeeCode', 'employee_code', 'code']) || '-'}</td>
+                  <td>{getLogValue(row, ['hallName', 'hall_name']) || '-'}</td>
+                  <td>{getLogValue(row, ['overrideReason', 'override_reason']) || '-'}</td>
                 </tr>
               ))
             ) : (
