@@ -9,10 +9,10 @@ import {
   Clock3,
   Database,
   Eye,
+  EyeOff,
   FileCheck2,
   Keyboard,
   LayoutDashboard,
-  Lock,
   LogOut,
   Maximize2,
   Minimize2,
@@ -157,7 +157,9 @@ function RolePreview({ role }) {
     <div className="border-2 border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">After login preview</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            After login preview
+          </div>
           <div className="mt-1 text-xl font-black text-slate-900">{info.afterTitle}</div>
         </div>
         <div className="border border-slate-300 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">
@@ -188,6 +190,7 @@ function LoginAccessPanel({
   onLogin,
   loginError,
   isLoggedIn,
+  passwordRef,
 }) {
   const current = roleAccess[role];
 
@@ -206,7 +209,7 @@ function LoginAccessPanel({
               className="text-[38px] font-black leading-[1] tracking-tight text-[#241d72] xl:text-[52px]"
             />
             <TypewriterText
-              text="HR pe click karoge to HR ki ID-password aur uske baad visible screens dono dikhenge. User aur Admin ke liye bhi same preview flow rahega."
+              text="Role select karne ke baad pehle ID auto-fill hoti hai. Enter dabane par cursor password field me shift hota hai."
               speed={12}
               delay={160}
               className="mt-3 max-w-3xl text-[15px] leading-6 text-slate-600"
@@ -220,7 +223,8 @@ function LoginAccessPanel({
                 onClick={() => {
                   setRole(item);
                   setUser(roleAccess[item].id);
-                  setPass(roleAccess[item].password);
+                  setPass("");
+                  setTimeout(() => passwordRef.current?.focus(), 0);
                 }}
                 className={cx(
                   "border-2 px-4 py-3 text-left transition",
@@ -228,7 +232,16 @@ function LoginAccessPanel({
                 )}
               >
                 <div className="text-[18px] font-black">{item === "USER" ? "User" : item}</div>
-                <div className={cx("mt-1 text-[12px] leading-5", role === item && item === "HR" ? "text-white/80" : role === item && item === "ADMIN" ? "text-[#E0222A]/80" : "text-slate-500")}>
+                <div
+                  className={cx(
+                    "mt-1 text-[12px] leading-5",
+                    role === item && item === "HR"
+                      ? "text-white/80"
+                      : role === item && item === "ADMIN"
+                      ? "text-[#E0222A]/80"
+                      : "text-slate-500"
+                  )}
+                >
                   {roleAccess[item].subtitle}
                 </div>
               </button>
@@ -280,7 +293,7 @@ function LoginAccessPanel({
             className="text-[32px] font-black leading-none text-slate-900"
           />
           <TypewriterText
-            text="Selected role ki ID aur password daal kar continue karo."
+            text="Selected role ki ID daaliye, Enter dabaiye, phir password bhariye."
             speed={12}
             delay={100}
             className="mt-2 text-[14px] leading-6 text-slate-500"
@@ -292,18 +305,32 @@ function LoginAccessPanel({
               <input
                 value={user}
                 onChange={(e) => setUser(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    passwordRef.current?.focus();
+                  }
+                }}
                 className="w-full border border-slate-400 px-4 py-3 text-[15px] outline-none focus:border-[#2b275d]"
+                placeholder="Enter role ID"
+                autoComplete="username"
               />
             </div>
 
             <div>
               <label className="mb-2 block text-[14px] font-semibold text-slate-800">Password</label>
-              <input
-                type="password"
-                value={pass}
-                onChange={(e) => setPass(e.target.value)}
-                className="w-full border border-slate-400 px-4 py-3 text-[15px] outline-none focus:border-[#2b275d]"
-              />
+              <div className="relative">
+                <input
+                  ref={passwordRef}
+                  type="password"
+                  value={pass}
+                  onChange={(e) => setPass(e.target.value)}
+                  className="w-full border border-slate-400 px-4 py-3 pr-12 text-[15px] outline-none focus:border-[#2b275d]"
+                  placeholder="Enter password"
+                  autoComplete="current-password"
+                />
+                <Eye className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              </div>
             </div>
 
             <button
@@ -341,7 +368,9 @@ function UserDashboard() {
         </div>
 
         <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">User scanner panel</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            User scanner panel
+          </div>
           <h3 className="mt-1 text-2xl font-black text-slate-900">Self Attendance Screen</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             User login ke baad employee apna code enter karega, verify button dekhega, aur apni last attendance status check karega.
@@ -380,7 +409,9 @@ function HREntriesDashboard() {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Scanner visible after HR login</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Scanner visible after HR login
+          </div>
           <div className="mt-2 text-lg font-black text-slate-900">HR Scanner</div>
           <div className="mt-3 grid gap-2">
             <input defaultValue="491676" className="border border-slate-300 px-4 py-3 text-sm outline-none" />
@@ -389,7 +420,9 @@ function HREntriesDashboard() {
         </div>
 
         <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Entries visible after HR login</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Entries visible after HR login
+          </div>
           <div className="mt-2 space-y-2">
             {entryRows.slice(0, 3).map((r) => (
               <div key={r[2]} className="border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
@@ -400,7 +433,9 @@ function HREntriesDashboard() {
         </div>
 
         <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Hall move visible after HR login</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Hall move visible after HR login
+          </div>
           <div className="mt-3 grid gap-2">
             <input placeholder="Employee code" className="border border-slate-300 px-4 py-3 text-sm outline-none" />
             <select className="border border-slate-300 px-4 py-3 text-sm outline-none">
@@ -429,7 +464,9 @@ function HRRosterDashboard() {
 
       <div className="border-2 border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Roster visible after HR login</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Roster visible after HR login
+          </div>
           <div className="flex gap-2">
             <button className="border border-slate-300 px-3 py-2 text-xs">CSV</button>
             <button className="border border-slate-300 px-3 py-2 text-xs">Excel</button>
@@ -441,7 +478,9 @@ function HRRosterDashboard() {
             <thead>
               <tr className="border-b bg-slate-50 text-slate-500">
                 {["Name", "Code", "Designation", "Hall", "Shift", "Week Off"].map((h) => (
-                  <th key={h} className="px-3 py-3">{h}</th>
+                  <th key={h} className="px-3 py-3">
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -449,7 +488,9 @@ function HRRosterDashboard() {
               {rosterRows.map((r) => (
                 <tr key={r[1]} className="border-b">
                   {r.map((cell, i) => (
-                    <td key={i} className={cx("px-3 py-3", i === 0 && "font-semibold")}>{cell}</td>
+                    <td key={i} className={cx("px-3 py-3", i === 0 && "font-semibold")}>
+                      {cell}
+                    </td>
                   ))}
                 </tr>
               ))}
@@ -473,7 +514,9 @@ function AdminDashboard() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Admin ko kya dikhega</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Admin ko kya dikhega
+          </div>
           <div className="mt-2 text-lg font-black text-slate-900">All role summaries and modules</div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {["Scanner", "Entries", "Roster", "Hall Manager", "Role Visibility", "System Summary"].map((x) => (
@@ -485,10 +528,15 @@ function AdminDashboard() {
         </div>
 
         <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Hall summary visible after Admin login</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Hall summary visible after Admin login
+          </div>
           <div className="mt-3 space-y-2">
             {hallCards.map((h) => (
-              <div key={h.name} className="flex items-center justify-between border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+              <div
+                key={h.name}
+                className="flex items-center justify-between border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"
+              >
                 <span className="font-semibold">{h.name}</span>
                 <span>{h.used}/{h.total}</span>
               </div>
@@ -509,10 +557,11 @@ export default function HRTrainingRoute() {
 
   const [role, setRole] = useState("HR");
   const [user, setUser] = useState(roleAccess.HR.id);
-  const [pass, setPass] = useState(roleAccess.HR.password);
+  const [pass, setPass] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState(false);
 
+  const passwordRef = useRef(null);
   const autoplayRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -567,13 +616,16 @@ export default function HRTrainingRoute() {
     setLoginError(false);
     setRole("HR");
     setUser(roleAccess.HR.id);
-    setPass(roleAccess.HR.password);
+    setPass("");
+    passwordRef.current?.focus();
   };
 
   const logoutAll = () => {
     setIsLoggedIn(false);
     setLoginError(false);
     setStep(0);
+    setPass("");
+    setUser(roleAccess[role].id);
   };
 
   const toggleFullscreen = async () => {
@@ -589,7 +641,6 @@ export default function HRTrainingRoute() {
     if (user === correct.id && pass === correct.password) {
       setIsLoggedIn(true);
       setLoginError(false);
-
       if (role === "USER") setStep(1);
       if (role === "HR") setStep(2);
       if (role === "ADMIN") setStep(4);
@@ -605,7 +656,7 @@ export default function HRTrainingRoute() {
   const shellTitle = {
     login: {
       title: "Role Based Login Access",
-      desc: "HR, Admin, aur User pe click karne par unki ID-password aur login ke baad ka exact screen flow dono dikh rahe hain.",
+      desc: "Role select karte hi ID auto-fill hoti hai. Password field me Enter ke baad focus shift hota hai, aur login ke baad specific dashboard preview dikhaya jata hai.",
     },
     user: {
       title: "User Flow After Login",
@@ -788,6 +839,7 @@ export default function HRTrainingRoute() {
                       onLogin={handleLogin}
                       loginError={loginError}
                       isLoggedIn={isLoggedIn}
+                      passwordRef={passwordRef}
                     />
                   )}
                   {activeTab === "user" && <UserDashboard />}
@@ -887,7 +939,7 @@ export default function HRTrainingRoute() {
                     Ready
                   </div>
                   <p className="mt-2 text-xs leading-5 text-slate-700">
-                    Ab HR pe click karne se hr1 aur hr123 dikhega; user pe user1 aur admin pe admin1 ke saath full post-login flow visible rahega.
+                    Ab role select karne par ID auto-fill hogi. Password field pe cursor move ho jayega, uske baad login button use kar sakte hain.
                   </p>
                 </div>
               </div>
