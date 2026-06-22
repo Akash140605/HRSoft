@@ -63,17 +63,14 @@ function MobileScanner({ onResult, onClose }) {
           videoRef.current,
           async (result) => {
             const text = result?.data || result;
+            if (!text) return;
             await onResult(text);
-            if (scannerRef.current) {
-              scannerRef.current.stop();
-            }
+            if (scannerRef.current) scannerRef.current.stop();
             onClose();
           }
         );
 
-        if (mounted) {
-          await scannerRef.current.start();
-        }
+        if (mounted) await scannerRef.current.start();
       } catch (err) {
         console.error('QR Scanner Error:', err);
       }
@@ -129,7 +126,6 @@ export default function ScannerPanel() {
   } = useHR();
 
   const [code, setCode] = useState('');
-  const [hrLoginCode, setHrLoginCode] = useState('');
   const [selectedHall, setSelectedHall] = useState('H1');
   const [reason, setReason] = useState('');
   const [toast, setToast] = useState(null);
@@ -139,7 +135,6 @@ export default function ScannerPanel() {
   const [query, setQuery] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [showMobileScanner, setShowMobileScanner] = useState(false);
-  const [isHrLogin, setIsHrLogin] = useState(false);
 
   const canScan = !totals.locked;
   const codeInputRef = useRef(null);
@@ -202,7 +197,7 @@ export default function ScannerPanel() {
       const res = await processEntry(finalCode);
       pushToast(res.ok ? 'success' : res.type || 'error', res.text || 'Done');
 
-      if (!res.ok && res.weekOff && state.currentRole === 'HR') {
+      if (!res.ok && res.weekOff && (state.currentRole === 'HR' || state.currentRole === 'ADMIN')) {
         const ok = window.confirm('Week off hai. HR override karna hai?');
         if (ok) {
           const ov = await hrOverrideEntry({
@@ -230,7 +225,6 @@ export default function ScannerPanel() {
   };
 
   const onMove = async () => {
-    if (!isHrLogin) return pushToast('error', 'Pehle HR login karo.');
     if (!code.trim() || !selectedHall || !reason.trim()) {
       return pushToast('error', 'Code, hall, reason sab required hain.');
     }
@@ -247,12 +241,6 @@ export default function ScannerPanel() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const onHrLogin = () => {
-    const ok = String(hrLoginCode).trim() === '123456';
-    setIsHrLogin(ok);
-    pushToast(ok ? 'success' : 'error', ok ? 'HR login success.' : 'Invalid HR code.');
   };
 
   const onQuickCopy = async () => {
@@ -285,11 +273,9 @@ export default function ScannerPanel() {
             <h2 className="truncate text-lg font-bold sm:text-xl">Dixon Dehradun Attendance</h2>
             <p className="truncate text-xs text-white/70 sm:text-sm">Scanner panel with hall control</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button type="button" className="md:hidden" onClick={() => setMenuOpen((v) => !v)}>
-              {menuOpen ? <X /> : <Menu />}
-            </button>
-          </div>
+          <button type="button" className="md:hidden" onClick={() => setMenuOpen((v) => !v)}>
+            {menuOpen ? <X /> : <Menu />}
+          </button>
         </div>
       </div>
 
@@ -297,20 +283,7 @@ export default function ScannerPanel() {
         {showHRControls && (
           <div className="mb-5 border-2 border-[#E0222A] bg-[#E0222A]/5 p-4">
             <div className="mb-3 text-sm font-bold text-[#E0222A]">HR Controls</div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <input
-                className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-                placeholder="HR 6-digit code"
-                value={hrLoginCode}
-                onChange={(e) => setHrLoginCode(e.target.value)}
-              />
-              <button
-                className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98]"
-                type="button"
-                onClick={onHrLogin}
-              >
-                HR Login
-              </button>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <input
                 className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
                 placeholder="Reason / override note"
@@ -328,11 +301,8 @@ export default function ScannerPanel() {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-3">
               <button
-                className="border-2 border-[#E0222A] bg-[#E0222A]/10 px-4 py-3 font-semibold text-[#E0222A] hover:bg-[#E0222A]/20"
+                className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98]"
                 type="button"
                 onClick={onMove}
                 disabled={busy}
@@ -340,15 +310,6 @@ export default function ScannerPanel() {
                 <ShieldAlert className="mr-1 inline h-4 w-4" />
                 Move Hall
               </button>
-              <span
-                className={`border-2 px-4 py-3 text-sm font-semibold ${
-                  isHrLogin
-                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                    : 'border-slate-300 bg-white text-slate-600'
-                }`}
-              >
-                {isHrLogin ? 'HR unlocked' : 'HR locked'}
-              </span>
             </div>
           </div>
         )}
@@ -384,24 +345,10 @@ export default function ScannerPanel() {
 
       <div className="p-4 sm:p-5">
         <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-4">
-          <div className="border-2 border-slate-300 bg-white p-5">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Role</div>
-            <div className="mt-2 text-xl font-bold text-slate-900">{state.currentRole}</div>
-          </div>
-          <div className="border-2 border-slate-300 bg-white p-5">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Selected Count</div>
-            <div className="mt-2 text-xl font-bold text-slate-900">{totals.selectedCount}</div>
-          </div>
-          <div className="border-2 border-slate-300 bg-white p-5">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Capacity</div>
-            <div className="mt-2 text-xl font-bold text-slate-900">{totals.totalCapacity}</div>
-          </div>
-          <div className="border-2 border-slate-300 bg-white p-5">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Status</div>
-            <div className={`mt-2 text-xl font-bold ${totals.locked ? 'text-[#E0222A]' : 'text-emerald-600'}`}>
-              {totals.locked ? 'Locked' : 'Open'}
-            </div>
-          </div>
+          <div className="border-2 border-slate-300 bg-white p-5"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Role</div><div className="mt-2 text-xl font-bold text-slate-900">{state.currentRole}</div></div>
+          <div className="border-2 border-slate-300 bg-white p-5"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Selected Count</div><div className="mt-2 text-xl font-bold text-slate-900">{totals.selectedCount}</div></div>
+          <div className="border-2 border-slate-300 bg-white p-5"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Capacity</div><div className="mt-2 text-xl font-bold text-slate-900">{totals.totalCapacity}</div></div>
+          <div className="border-2 border-slate-300 bg-white p-5"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Status</div><div className={`mt-2 text-xl font-bold ${totals.locked ? 'text-[#E0222A]' : 'text-emerald-600'}`}>{totals.locked ? 'Locked' : 'Open'}</div></div>
         </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -480,9 +427,7 @@ export default function ScannerPanel() {
                   <div className="mt-3 h-2 border-2 border-slate-300 bg-white">
                     <div
                       className={`h-2 ${h.full ? 'bg-[#E0222A]' : 'bg-slate-700'}`}
-                      style={{
-                        width: `${Math.min(100, Math.round((h.used / Math.max(h.capacity, 1)) * 100))}%`
-                      }}
+                      style={{ width: `${Math.min(100, Math.round((h.used / Math.max(h.capacity, 1)) * 100))}%` }}
                     />
                   </div>
                 </div>
