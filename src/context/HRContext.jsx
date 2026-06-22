@@ -40,6 +40,25 @@ const normalizeHall = (h) => ({
   color: h.color || 'blue',
 });
 
+const normalizeEntry = (e) => ({
+  ...e,
+  id: e.id,
+  code: String(e.code || '').trim(),
+  name: e.name || '',
+  designation: e.designation || '',
+  weekOff: e.week_off || e.weekOff || 'Sunday',
+  shift: e.shift || 'A',
+  hallId: e.hall_id || e.hallId || '',
+  hallName: e.hall_name || e.hallName || `Hall ${e.hall_id || e.hallId || '?'}`,
+  source: e.source || 'SCAN',
+  hrCode: e.hr_code || e.hrCode || '',
+  hrAction: e.hr_action || e.hrAction || '',
+  overrideReason: e.override_reason || e.overrideReason || '',
+  date: e.date || '',
+  time: e.time || '',
+  day: e.day || '',
+});
+
 const initialState = () => ({
   selectedDate: todayISO(),
   currentUser: null,
@@ -75,7 +94,7 @@ export function HRProvider({ children }) {
         ...prev,
         employees: employeesRes?.success ? (employeesRes.data || []).map(normalizeEmployee) : prev.employees,
         halls: hallsRes?.success ? (hallsRes.data || []).map(normalizeHall) : prev.halls,
-        entries: entriesRes?.success ? (entriesRes.data || []) : prev.entries,
+        entries: entriesRes?.success ? (entriesRes.data || []).map(normalizeEntry) : prev.entries,
         logs: logsRes?.success ? (logsRes.data || []) : prev.logs,
         attendanceTracker: trackerRes?.success ? (trackerRes.data || []) : prev.attendanceTracker,
       }));
@@ -108,7 +127,7 @@ export function HRProvider({ children }) {
   );
 
   const activeEntries = useMemo(
-    () => state.entries.filter((e) => dateKey(e.date) === state.selectedDate),
+    () => (Array.isArray(state.entries) ? state.entries : []).filter((e) => dateKey(e.date) === state.selectedDate),
     [state.entries, state.selectedDate]
   );
 
@@ -215,6 +234,36 @@ export function HRProvider({ children }) {
 
   const refreshAfterWrite = async () => {
     await fetchAllDataFromAPI();
+  };
+
+  const deleteOldScanEntriesByCode = async (code) => {
+    const current = Array.isArray(state.entries) ? state.entries : [];
+    const oldScans = current.filter(
+      (e) =>
+        String(e.code).trim() === String(code).trim() &&
+        String(e.source || '') === 'SCAN'
+    );
+
+    if (!oldScans.length) return;
+
+    setState((prev) => ({
+      ...prev,
+      entries: prev.entries.filter(
+        (e) =>
+          !(
+            String(e.code).trim() === String(code).trim() &&
+            String(e.source || '') === 'SCAN'
+          )
+      ),
+    }));
+
+    for (const entry of oldScans) {
+      try {
+        if (entry.id != null) {
+          await hrApi.deleteEntry(entry.id);
+        }
+      } catch (err) {}
+    }
   };
 
   const processEntry = async (code) => {
@@ -361,14 +410,15 @@ export function HRProvider({ children }) {
     const apiRes = await hrApi.addEntry(payload);
 
     if (apiRes.success) {
-      const newEntry = apiRes.data;
+      const newEntry = normalizeEntry(apiRes.data);
 
       setState((prev) => {
         const filteredEntries = prev.entries.filter(
           (e) =>
             !(
               dateKey(e.date) === state.selectedDate &&
-              String(e.code).trim() === String(emp.code).trim()
+              String(e.code).trim() === String(emp.code).trim() &&
+              String(e.source || '') === 'SCAN'
             )
         );
 
@@ -378,6 +428,8 @@ export function HRProvider({ children }) {
         };
       });
 
+      await deleteOldScanEntriesByCode(emp.code);
+
       addLogRow({
         id: newEntry.id || Date.now(),
         type: 'HR_TRANSFER',
@@ -386,7 +438,7 @@ export function HRProvider({ children }) {
         employeeCode: emp.code,
         hallId: hall.id,
         hallName: hall.name,
-        overrideReason: newEntry.override_reason || reasonTag,
+        overrideReason: newEntry.overrideReason || reasonTag,
         at: newEntry.date || new Date().toISOString(),
       });
 
