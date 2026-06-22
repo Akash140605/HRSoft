@@ -1,4 +1,5 @@
 const API_BASE_URL = 'https://kushalyouth.com/api/api.php';
+
 const buildUrl = (endpoint) => {
   const clean = String(endpoint || '').replace(/^\/+/, '');
   return `${API_BASE_URL}?endpoint=${clean}`;
@@ -21,7 +22,6 @@ const apiCall = async (endpoint, method = 'GET', data = null) => {
 
   try {
     const response = await fetch(url, options);
-
     const contentType = response.headers.get('content-type') || '';
     const isJson = contentType.includes('application/json');
 

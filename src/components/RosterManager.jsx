@@ -13,10 +13,20 @@ import {
   Building2,
   Users,
   Trash,
-  CheckSquare,
 } from 'lucide-react';
 import { useHR } from '../context/HRContext';
 import hrApi from '../api/hrApi';
+
+const normalizeEmp = (emp, fallbackHall = null) => ({
+  id: emp.id || Date.now(),
+  name: emp.name || '',
+  code: String(emp.code || '').trim(),
+  designation: emp.designation || '',
+  weekOff: emp.weekOff || emp.week_off || 'Sunday',
+  shift: emp.shift || 'A',
+  hallId: emp.hallId || emp.hall_id || fallbackHall?.id || '',
+  hallName: emp.hallName || emp.hall_name || fallbackHall?.name || '',
+});
 
 export default function RosterManager() {
   const { state, setState, resetAll } = useHR();
@@ -36,7 +46,7 @@ export default function RosterManager() {
 
   useEffect(() => {
     if (!form.hallId && state.halls?.length) {
-      setForm((p) => ({ ...p, hallId: p.hallId || state.halls[0].id }));
+      setForm((p) => ({ ...p, hallId: state.halls[0].id }));
     }
   }, [state.halls]);
 
@@ -64,7 +74,7 @@ export default function RosterManager() {
       designation: '',
       weekOff: 'Sunday',
       shift: 'A',
-      hallId: state.halls?.[0]?.id || '',
+      hallId: '',
     });
   };
 
@@ -76,7 +86,9 @@ export default function RosterManager() {
 
   const toggleSelectAll = () => {
     const visibleIds = rows.map((r) => r.id);
-    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    const allSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+
     setSelectedIds(
       allSelected
         ? selectedIds.filter((id) => !visibleIds.includes(id))
@@ -147,22 +159,13 @@ export default function RosterManager() {
         : await hrApi.addEmployee(employeeData);
 
       if (response.success) {
-        const newEmp = {
-          id: response.data.id || editingId || Date.now(),
-          name: employeeData.name,
-          code: employeeData.code,
-          designation: employeeData.designation,
-          weekOff: employeeData.week_off,
-          shift: employeeData.shift,
-          hallId: employeeData.hall_id,
-          hallName: employeeData.hall_name,
-        };
+        const returned = normalizeEmp(response.data || {}, hall);
 
         setState((prev) => ({
           ...prev,
           employees: editingId
-            ? prev.employees.map((e) => (e.id === editingId ? newEmp : e))
-            : [newEmp, ...prev.employees],
+            ? prev.employees.map((e) => (e.id === editingId ? returned : e))
+            : [returned, ...prev.employees],
         }));
 
         setMessage(editingId ? 'Employee updated successfully!' : 'Employee added to database!');
@@ -176,7 +179,7 @@ export default function RosterManager() {
           hallId: state.halls?.[0]?.id || '',
         });
       } else {
-        setMessage('Error: ' + response.error);
+        setMessage('Error: ' + (response.error || 'Save failed'));
       }
     } catch (error) {
       setMessage('Failed: ' + error.message);
@@ -229,7 +232,7 @@ export default function RosterManager() {
         designation: '',
         weekOff: 'Sunday',
         shift: 'A',
-        hallId: state.halls?.[0]?.id || '',
+        hallId: '',
       });
     }
   };

@@ -266,9 +266,7 @@ export function HRProvider({ children }) {
 
     for (const entry of oldScans) {
       try {
-        if (entry.id != null) {
-          await hrApi.deleteEntry(entry.id);
-        }
+        if (entry.id != null) await hrApi.deleteEntry(entry.id);
       } catch {}
     }
   };
