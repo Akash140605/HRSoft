@@ -141,7 +141,7 @@ export default function RosterManager() {
     }
 
     setLoading(true);
-    const hall = state.halls.find((h) => String(h.id) === String(form.hallId)) || state.halls[0];
+    const hall = state.halls.find((h) => String(h.id) === String(form.hallId)) || null;
 
     const employeeData = {
       code: form.code.trim(),
@@ -149,7 +149,7 @@ export default function RosterManager() {
       designation: form.designation.trim(),
       week_off: form.weekOff,
       shift: form.shift,
-      hall_id: hall?.id || '',
+      hall_id: hall?.id || form.hallId || '',
       hall_name: hall?.name || '',
     };
 
@@ -288,78 +288,178 @@ export default function RosterManager() {
     URL.revokeObjectURL(url);
   };
 
-  const importCsv = async (file) => {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const text = String(reader.result || '').trim();
-      if (!text) return;
+const importCsv = async (file) => {
+  const reader = new FileReader();
+
+  reader.onload = async () => {
+    try {
+      const text = String(reader.result || "").trim();
+      if (!text) {
+        setMessage("CSV file empty hai.");
+        return;
+      }
 
       const lines = text.split(/\r?\n/).filter(Boolean);
-      const head = lines[0].split(',').map((s) => s.replaceAll('"', '').trim());
+      if (lines.length < 2) {
+        setMessage("CSV me data nahi mila.");
+        return;
+      }
 
-      const employeesToImport = lines.slice(1).map((line) => {
-        const cols =
-          line
-            .match(/("[^"]*(?:""[^"]*)*"|[^,]+)/g)
-            ?.map((v) => v.replace(/^"|"$/g, '').replaceAll('""', '"')) || [];
+      const headers = lines[0].split(",").map((s) => s.replaceAll('"', "").trim());
 
+      const parseLine = (line) =>
+        line.match(/("([^"]|"")*"|[^,]+)/g)?.map((v) => v.replace(/^"|"$/g, "").replaceAll('""', '"')) || [];
+
+      const normalizeText = (val) =>
+        String(val || "")
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, " ");
+
+      const buildHallLookup = (halls = []) => {
+        return halls.map((h) => ({
+          ...h,
+          _normName: normalizeText(h.name),
+          _normId: normalizeText(h.id),
+        }));
+      };
+
+      const hallsLookup = buildHallLookup(state.halls || []);
+
+      const findHall = (rawHallName) => {
+        const key = normalizeText(rawHallName);
+
+        let hall =
+          hallsLookup.find((h) => h._normName === key) ||
+          hallsLookup.find((h) => h._normId === key) ||
+          hallsLookup.find((h) => h._normName.includes(key) || key.includes(h._normName));
+
+        return hall || null;
+      };
+
+      const employeesToImport = [];
+      const newHallsToAdd = [];
+
+      for (const line of lines.slice(1)) {
+        const cols = parseLine(line);
         const obj = {};
-        head.forEach((h, i) => {
-          obj[h] = cols[i] || '';
+        headers.forEach((h, i) => {
+          obj[h] = cols[i] || "";
         });
 
-        const name = obj['Operator Name'] || obj.name || '';
-        const code = obj['Code'] || obj.code || '';
-        const designation = obj['Designation'] || obj.designation || '';
-        const weekOff = obj['WeakOff'] || obj['weekOff'] || 'Sunday';
-        const shift = obj['Shift'] || obj.shift || 'A';
-        const hallRaw = obj['Hall'] || obj.hallName || '';
+        const name = obj.name || obj["Operator Name"] || "";
+        const code = obj.code || obj["Code"] || "";
+        const designation = obj.designation || obj["Designation"] || "";
+        const weekOff = obj.weekOff || obj["weekOff"] || obj["WeakOff"] || "Sunday";
+        const shift = obj.shift || obj["Shift"] || "A";
+        const hallNameRaw = obj.hallName || obj.hall_name || obj["Hall"] || "";
 
-        const hall =
-          state.halls.find(
-            (h) =>
-              h.name.toLowerCase() === String(hallRaw).toLowerCase() ||
-              h.id.toLowerCase() === String(hallRaw).toLowerCase()
-          ) || state.halls[0];
+        let hall = findHall(hallNameRaw);
 
-        return {
-          code,
+        if (!hall) {
+          const hallName = String(hallNameRaw || "").trim() || `Hall ${state.halls.length + newHallsToAdd.length + 1}`;
+          const tempId = `temp-${hallName.toLowerCase().replace(/\s+/g, "-")}`;
+
+          hall = {
+            id: tempId,
+            name: hallName,
+            capacity: 50,
+            color: "blue",
+          };
+
+          const alreadyQueued = newHallsToAdd.some(
+            (h) => normalizeText(h.name) === normalizeText(hall.name)
+          );
+
+          if (!alreadyQueued) newHallsToAdd.push(hall);
+        }
+
+        employeesToImport.push({
           name,
+          code,
           designation,
           weekOff,
           shift,
-          hallId: hall?.id || '',
-          hallName: hall?.name || '',
-        };
-      });
+          hallId: hall.id,
+          hallName: hall.name,
+        });
+      }
 
       setLoading(true);
       let imported = 0;
 
+      const currentHalls = [...(state.halls || [])];
+
+      for (const hall of newHallsToAdd) {
+        try {
+          const res = await hrApi.addHall({
+            name: hall.name,
+            capacity: hall.capacity,
+            color: hall.color,
+          });
+
+          if (res.success && res.data) {
+            currentHalls.push(res.data);
+          } else {
+            currentHalls.push(hall);
+          }
+        } catch (err) {
+          currentHalls.push(hall);
+        }
+      }
+
+      setState((prev) => ({
+        ...prev,
+        halls: currentHalls,
+      }));
+
       for (const emp of employeesToImport) {
         try {
-          const response = await hrApi.addEmployee(emp);
+          const payload = {
+            code: String(emp.code).trim(),
+            name: String(emp.name).trim(),
+            designation: String(emp.designation).trim(),
+            week_off: emp.weekOff,
+            shift: emp.shift,
+            hall_id: emp.hallId,
+            hall_name: emp.hallName,
+          };
+
+          const response = await hrApi.addEmployee(payload);
           if (response.success) imported++;
         } catch (error) {
-          console.error('Import failed:', error);
+          console.error("Import failed:", error);
         }
       }
 
       const newEmployees = employeesToImport.map((emp) => ({
         id: Date.now() + Math.random(),
-        ...emp,
+        code: emp.code,
+        name: emp.name,
+        designation: emp.designation,
+        weekOff: emp.weekOff,
+        shift: emp.shift,
+        hallId: emp.hallId,
+        hallName: emp.hallName,
       }));
 
       setState((prev) => ({
         ...prev,
         employees: [...newEmployees, ...prev.employees],
       }));
-      setMessage(`${imported} of ${employeesToImport.length} records imported to database!`);
-      setLoading(false);
-    };
 
-    reader.readAsText(file);
+      setMessage(
+        `${imported} of ${employeesToImport.length} records imported successfully!`
+      );
+    } catch (error) {
+      setMessage("CSV import failed: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  reader.readAsText(file);
+};
 
   const stats = useMemo(() => {
     const byHall = new Map();
