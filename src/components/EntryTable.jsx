@@ -16,11 +16,17 @@ export default function EntryTable() {
   const { state, setState, moveEmployeeToHall } = useHR();
 
   const [query, setQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("");
+  const [hallFilter, setHallFilter] = useState("");
+  const [shiftFilter, setShiftFilter] = useState("");
+  const [reasonFilter, setReasonFilter] = useState("");
+
   const [moveCode, setMoveCode] = useState("");
   const [moveHallId, setMoveHallId] = useState("H1");
   const [moveReason, setMoveReason] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
-  const [hallFilter, setHallFilter] = useState("");
+
   const [selectedRow, setSelectedRow] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -48,6 +54,9 @@ export default function EntryTable() {
     const q = query.trim().toLowerCase();
     const base = Array.isArray(state.entries) ? state.entries : [];
 
+    const fromTime = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : null;
+    const toTime = dateTo ? new Date(dateTo).setHours(23, 59, 59, 999) : null;
+
     return base.filter((r) => {
       const vals = [
         r.code,
@@ -67,9 +76,20 @@ export default function EntryTable() {
       const qOk = !q || vals.includes(q);
       const sourceOk = !sourceFilter || String(r.source || "") === sourceFilter;
       const hallOk = !hallFilter || String(r.hallId || "") === hallFilter;
-      return qOk && sourceOk && hallOk;
+      const shiftOk = !shiftFilter || String(r.shift || "") === shiftFilter;
+
+      const reasonText = String(r.overrideReason || "").toLowerCase();
+      const reasonOk =
+        !reasonFilter || reasonText.includes(reasonFilter.trim().toLowerCase());
+
+      const rowTime = r.date ? new Date(r.date).getTime() : null;
+      const dateOk =
+        (!fromTime || (rowTime !== null && rowTime >= fromTime)) &&
+        (!toTime || (rowTime !== null && rowTime <= toTime));
+
+      return qOk && sourceOk && hallOk && shiftOk && reasonOk && dateOk;
     });
-  }, [state.entries, hallFilter, query, sourceFilter]);
+  }, [state.entries, hallFilter, query, reasonFilter, shiftFilter, sourceFilter, dateFrom, dateTo]);
 
   const exportCsv = () => {
     const headers = [
@@ -159,8 +179,12 @@ export default function EntryTable() {
 
   const clearFilters = () => {
     setQuery("");
+    setDateFrom("");
+    setDateTo("");
     setSourceFilter("");
     setHallFilter("");
+    setShiftFilter("");
+    setReasonFilter("");
   };
 
   return (
@@ -206,6 +230,20 @@ export default function EntryTable() {
             />
           </div>
 
+          <input
+            type="date"
+            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+
+          <input
+            type="date"
+            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+
           <select
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={sourceFilter}
@@ -229,6 +267,25 @@ export default function EntryTable() {
               </option>
             ))}
           </select>
+
+          <select
+            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            value={shiftFilter}
+            onChange={(e) => setShiftFilter(e.target.value)}
+          >
+            <option value="">All shifts</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+            <option value="GENERAL">GENERAL</option>
+          </select>
+
+          <input
+            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
+            value={reasonFilter}
+            onChange={(e) => setReasonFilter(e.target.value)}
+            placeholder="Filter by reason"
+          />
 
           <input
             className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
