@@ -8,7 +8,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost',
+        target: 'https://kushalyouth.com',
         changeOrigin: true,
       }
     }
