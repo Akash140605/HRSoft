@@ -48,7 +48,7 @@ const normalizeEntry = (e) => ({
   hrCode: e.hr_code || e.hrCode || "",
   hrAction: e.hr_action || e.hrAction || "",
   overrideReason: e.override_reason || e.overrideReason || "",
-  date: e.date || "",
+  date: e.date || e.at || "",
   time: e.time || "",
   day: e.day || "",
 });
@@ -85,6 +85,19 @@ const safeParse = (value, fallback) => {
   }
 };
 
+const getArray = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.rows)) return data.rows;
+  if (Array.isArray(data?.logs)) return data.logs;
+  if (Array.isArray(data?.entries)) return data.entries;
+  if (Array.isArray(data?.employees)) return data.employees;
+  if (Array.isArray(data?.halls)) return data.halls;
+  if (Array.isArray(data?.attendance)) return data.attendance;
+  return [];
+};
+
 export function HRProvider({ children }) {
   const [state, setState] = useState(() => {
     if (typeof window === "undefined") return createInitialState();
@@ -107,16 +120,38 @@ export function HRProvider({ children }) {
       ]);
 
       setState((prev) => {
-        const halls = hallsRes?.success ? (hallsRes.data || []).map(normalizeHall) : prev.halls;
+        const hallsRaw = hallsRes?.success ? getArray(hallsRes.data ?? hallsRes) : prev.halls;
+        const halls = (Array.isArray(hallsRaw) ? hallsRaw : prev.halls).map(normalizeHall);
         const fallbackHall = halls?.[0] || null;
 
-        const employees = employeesRes?.success
-          ? (employeesRes.data || []).map((e) => normalizeEmployee(e, fallbackHall))
-          : prev.employees.map((e) => normalizeEmployee(e, fallbackHall));
+        const employeesRaw = employeesRes?.success ? getArray(employeesRes.data ?? employeesRes) : prev.employees;
+        const employees = (Array.isArray(employeesRaw) ? employeesRaw : prev.employees).map((e) =>
+          normalizeEmployee(e, fallbackHall)
+        );
 
-        const entries = entriesRes?.success ? (entriesRes.data || []).map(normalizeEntry) : prev.entries;
-        const logs = logsRes?.success ? (logsRes.data || []) : prev.logs;
-        const attendanceTracker = trackerRes?.success ? (trackerRes.data || []) : prev.attendanceTracker;
+        const entriesRaw = entriesRes?.success ? getArray(entriesRes.data ?? entriesRes) : prev.entries;
+        const entries = (Array.isArray(entriesRaw) ? entriesRaw : prev.entries).map(normalizeEntry);
+
+        const logsRaw = logsRes?.success ? getArray(logsRes.data ?? logsRes) : prev.logs;
+        const logs = (Array.isArray(logsRaw) ? logsRaw : prev.logs).map((l) => ({
+          ...makeLogRow(
+            l.type || l.action || "",
+            l.message || l.text || "",
+            {
+              id: l.id,
+              by: l.by || l.hrCode || l.hr_code || "",
+              employeeCode: l.employeeCode || l.employee_code || l.code || "",
+              hallId: l.hallId || l.hall_id || "",
+              hallName: l.hallName || l.hall_name || "",
+              overrideReason: l.overrideReason || l.override_reason || "",
+              at: l.at || l.date || l.createdAt || new Date().toISOString(),
+            }
+          ),
+          ...l,
+        }));
+
+        const trackerRaw = trackerRes?.success ? getArray(trackerRes.data ?? trackerRes) : prev.attendanceTracker;
+        const attendanceTracker = Array.isArray(trackerRaw) ? trackerRaw : prev.attendanceTracker;
 
         return {
           ...prev,
@@ -160,7 +195,7 @@ export function HRProvider({ children }) {
   const activeEntries = useMemo(
     () =>
       (Array.isArray(state.entries) ? state.entries : []).filter(
-        (e) => dateKey(e.date) === state.selectedDate
+        (e) => dateKey(e.date || e.at) === state.selectedDate
       ),
     [state.entries, state.selectedDate]
   );
@@ -202,7 +237,7 @@ export function HRProvider({ children }) {
       const shift = getShift(shiftCode);
       if (!shift) return true;
 
-      const [h, m] = timeHHMM.split(":").map(Number);
+      const [h, m] = String(timeHHMM || "00:00").split(":").map(Number);
       const current = h * 60 + m;
       const [sh, sm] = shift.start.split(":").map(Number);
       const [eh, em] = shift.end.split(":").map(Number);
@@ -471,7 +506,7 @@ export function HRProvider({ children }) {
           ...prev.entries.filter(
             (e) =>
               !(
-                dateKey(e.date) === prev.selectedDate &&
+                dateKey(e.date || e.at) === prev.selectedDate &&
                 String(e.code).trim() === String(emp.code).trim() &&
                 String(e.source || "") === "SCAN"
               )
@@ -503,14 +538,15 @@ export function HRProvider({ children }) {
     state.entries.forEach((e) => {
       const k = String(e.code).trim();
       const arr = byEmp.get(k) || [];
-      arr.push(e.date);
+      arr.push(e.date || e.at || "");
       byEmp.set(k, arr);
     });
 
     return state.employees.map((emp) => {
       const dates = byEmp.get(String(emp.code).trim()) || [];
       const uniqueDays = new Set(dates.map((d) => dateKey(d)));
-      const lastSeen = dates.length ? [...dates].sort().at(-1) : "";
+      const sorted = [...dates].sort();
+      const lastSeen = sorted.length ? sorted[sorted.length - 1] : "";
       const absentDays = Math.max(0, 30 - uniqueDays.size);
 
       return {
