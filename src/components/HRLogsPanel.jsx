@@ -13,7 +13,8 @@ const getLogValue = (log, keys) => {
 
 const normalizeLog = (log) => ({
   ...log,
-  at: log.at || log.date || log.createdAt || "",
+  id: log?.id ?? `${log?.at || log?.date || log?.createdAt || Date.now()}-${Math.random()}`,
+  at: log?.at || log?.date || log?.createdAt || "",
   type: getLogValue(log, ["type"]) || "",
   message: getLogValue(log, ["message"]) || "",
   by: getLogValue(log, ["by", "hrCode", "hr_code"]) || "",
@@ -22,6 +23,14 @@ const normalizeLog = (log) => ({
   hallName: getLogValue(log, ["hallName", "hall_name"]) || "",
   overrideReason: getLogValue(log, ["overrideReason", "override_reason"]) || "",
 });
+
+const getLogsArray = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.logs)) return data.logs;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.rows)) return data.rows;
+  return [];
+};
 
 export default function HRLogsPanel() {
   const { state, setState } = useHR();
@@ -37,14 +46,15 @@ export default function HRLogsPanel() {
     setLoading(true);
     try {
       const res = await hrApi.getLogs();
-      if (res.success) {
-        setState((prev) => ({
-          ...prev,
-          logs: Array.isArray(res.data) ? res.data.map(normalizeLog) : [],
-        }));
-      } else {
-        setState((prev) => ({ ...prev, logs: [] }));
-      }
+      const raw = res?.success ? getLogsArray(res.data ?? res) : [];
+      const normalized = raw.map(normalizeLog);
+      setState((prev) => ({
+        ...prev,
+        logs: normalized,
+      }));
+    } catch (err) {
+      console.error("getLogs failed:", err);
+      setState((prev) => ({ ...prev, logs: [] }));
     } finally {
       setLoading(false);
     }
@@ -57,7 +67,7 @@ export default function HRLogsPanel() {
   const hrIds = useMemo(() => {
     const ids = new Set();
     (state.logs || []).forEach((log) => {
-      const id = getLogValue(log, ["by", "hrCode", "hr_code"]);
+      const id = log.by || getLogValue(log, ["by", "hrCode", "hr_code"]);
       if (id) ids.add(id);
     });
     return Array.from(ids).sort();
@@ -67,18 +77,18 @@ export default function HRLogsPanel() {
     const q = query.trim().toLowerCase();
 
     return (state.logs || []).filter((log) => {
-      const logHr = getLogValue(log, ["by", "hrCode", "hr_code"]);
-      const logEmp = getLogValue(log, ["employeeCode", "employee_code", "code"]);
-      const logType = getLogValue(log, ["type"]);
-      const logMsg = getLogValue(log, ["message"]);
-      const logHall = getLogValue(log, ["hallName", "hall_name"]);
-      const logReason = getLogValue(log, ["overrideReason", "override_reason"]);
+      const logHr = (log.by || getLogValue(log, ["by", "hrCode", "hr_code"])).trim();
+      const logEmp = (log.employeeCode || getLogValue(log, ["employeeCode", "employee_code", "code"])).trim();
+      const logType = (log.type || getLogValue(log, ["type"])).trim();
+      const logMsg = (log.message || getLogValue(log, ["message"])).trim();
+      const logHall = (log.hallName || getLogValue(log, ["hallName", "hall_name"])).trim();
+      const logReason = (log.overrideReason || getLogValue(log, ["overrideReason", "override_reason"])).trim();
       const text = `${logType} ${logMsg} ${logHr} ${logEmp} ${logHall} ${logReason}`.toLowerCase();
 
-      const hrOk = !hrCode || logHr === hrCode.trim();
-      const selectedHrOk = !selectedHrId || logHr === selectedHrId.trim();
-      const empOk = !employeeCode || logEmp === employeeCode.trim();
-      const actOk = !actionType || logType === actionType.trim();
+      const hrOk = !hrCode || logHr.toUpperCase() === hrCode.trim().toUpperCase();
+      const selectedHrOk = !selectedHrId || logHr.toUpperCase() === selectedHrId.trim().toUpperCase();
+      const empOk = !employeeCode || logEmp.toUpperCase() === employeeCode.trim().toUpperCase();
+      const actOk = !actionType || logType.toUpperCase() === actionType.trim().toUpperCase();
       const qOk = !q || text.includes(q);
 
       return hrOk && selectedHrOk && empOk && actOk && qOk;
@@ -212,20 +222,20 @@ export default function HRLogsPanel() {
               </tr>
             ) : rows.length ? (
               rows.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id || `${row.at}-${row.by}-${row.employeeCode}`}>
                   <td>{row.at ? String(row.at).slice(0, 19).replace("T", " ") : "-"}</td>
                   <td>
                     <span className="badge border border-slate-300 bg-white text-slate-700">
-                      {getLogValue(row, ["type"]) || "-"}
+                      {row.type || "-"}
                     </span>
                   </td>
-                  <td>{getLogValue(row, ["message"]) || "-"}</td>
+                  <td>{row.message || "-"}</td>
                   <td className="font-medium text-slate-900">
-                    {getLogValue(row, ["by", "hrCode", "hr_code"]) || (getLogValue(row, ["type"]) === "SCAN" ? "SYSTEM" : "-")}
+                    {row.by || (row.type === "SCAN" ? "SYSTEM" : "-")}
                   </td>
-                  <td>{getLogValue(row, ["employeeCode", "employee_code", "code"]) || "-"}</td>
-                  <td>{getLogValue(row, ["hallName", "hall_name"]) || "-"}</td>
-                  <td>{getLogValue(row, ["overrideReason", "override_reason"]) || "-"}</td>
+                  <td>{row.employeeCode || "-"}</td>
+                  <td>{row.hallName || "-"}</td>
+                  <td>{row.overrideReason || "-"}</td>
                 </tr>
               ))
             ) : (
