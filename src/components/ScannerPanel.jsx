@@ -4,8 +4,6 @@ import {
   CalendarDays,
   ScanBarcode,
   Keyboard,
-  Menu,
-  X,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -15,6 +13,8 @@ import {
   Copy,
   Search,
   Camera,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useHR } from "../context/HRContext";
 
@@ -42,8 +42,8 @@ function Toast({ toast, onClose }) {
       : AlertTriangle;
 
   return (
-    <div className={`fixed left-1/2 top-4 z-[100] -translate-x-1/2 rounded border-2 px-4 py-3 shadow-lg ${cls}`}>
-      <div className="flex items-center gap-2 text-sm font-semibold">
+    <div className={`fixed left-1/2 top-2 z-[100] -translate-x-1/2 rounded border px-3 py-2 shadow-lg ${cls}`}>
+      <div className="flex items-center gap-2 text-xs font-semibold sm:text-sm">
         <Icon className="h-4 w-4" />
         {toast.message}
       </div>
@@ -97,27 +97,44 @@ function MobileScanner({ onResult, onClose }) {
   }, [onResult, onClose]);
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-md border-2 border-[#23205C] bg-white p-4 shadow-xl">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-900">QR Scanner</h3>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-2">
+      <div className="flex h-[92vh] w-full max-w-sm flex-col overflow-hidden border border-[#23205C] bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b px-3 py-2">
+          <h3 className="text-sm font-semibold text-slate-900">QR Scanner</h3>
           <button
             type="button"
             onClick={onClose}
-            className="border-2 border-[#E0222A] bg-[#E0222A] px-3 py-1 text-white"
+            className="rounded bg-[#E0222A] px-3 py-1.5 text-xs font-semibold text-white"
           >
             Close
           </button>
         </div>
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full border-2 border-slate-300"
-          style={{ height: "350px" }}
-        />
+        <div className="flex-1 p-2">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="h-full w-full rounded border border-slate-300 object-cover"
+          />
+        </div>
       </div>
+    </div>
+  );
+}
+
+function CompactStat({ label, value, tone = "slate" }) {
+  const cls =
+    tone === "danger"
+      ? "border-[#E0222A] text-[#E0222A]"
+      : tone === "success"
+      ? "border-emerald-600 text-emerald-600"
+      : "border-slate-300 text-slate-900";
+
+  return (
+    <div className={`shrink-0 rounded-full border bg-white px-2.5 py-1 ${cls}`}>
+      <div className="text-[9px] font-semibold uppercase leading-none text-slate-500">{label}</div>
+      <div className="mt-0.5 text-[11px] font-bold leading-none">{value}</div>
     </div>
   );
 }
@@ -137,17 +154,19 @@ export default function ScannerPanel() {
   const [selectedHall, setSelectedHall] = useState("H1");
   const [reason, setReason] = useState("");
   const [toast, setToast] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [mode, setMode] = useState("scan");
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [mobileScannerOpen, setMobileScannerOpen] = useState(false);
+  const [showHrControls, setShowHrControls] = useState(true);
 
   const canScan = !totals.locked;
   const codeInputRef = useRef(null);
   const successBeepRef = useRef(null);
   const errorBeepRef = useRef(null);
+
+  const isHR = state.currentRole === "HR" || state.currentRole === "ADMIN";
 
   const empResult = useMemo(
     () => state.employees.find((e) => String(e.code).trim() === String(code).trim()),
@@ -157,7 +176,6 @@ export default function ScannerPanel() {
   const recentRows = useMemo(() => {
     const mapped = (Array.isArray(activeEntries) ? activeEntries : []).map((entry) => ({
       ...entry,
-      hallId: entry.hall_id || entry.hallId || "",
       hallName: entry.hall_name || entry.hallName || `Hall ${entry.hall_id || entry.hallId || "?"}`,
       overrideReason: entry.override_reason || entry.overrideReason || "",
     }));
@@ -195,12 +213,20 @@ export default function ScannerPanel() {
     else playError();
   };
 
-  const focusCode = () => codeInputRef.current?.focus();
+  const focusCode = () => {
+    requestAnimationFrame(() => {
+      codeInputRef.current?.focus();
+    });
+  };
 
   const handleSuccessProcess = (ok) => {
     if (ok) setCode("");
     focusCode();
   };
+
+  useEffect(() => {
+    focusCode();
+  }, []);
 
   const onProcess = async (value) => {
     const finalCode = String(value ?? code).trim();
@@ -212,7 +238,7 @@ export default function ScannerPanel() {
       const res = await processEntry(finalCode);
       pushToast(res.ok ? "success" : res.type || "error", res.text || "Done");
 
-      if (!res.ok && res.weekOff && (state.currentRole === "HR" || state.currentRole === "ADMIN")) {
+      if (!res.ok && res.weekOff && isHR) {
         const ok = window.confirm("Week off hai. HR override karna hai?");
         if (ok) {
           const ov = await hrOverrideEntry({
@@ -273,267 +299,262 @@ export default function ScannerPanel() {
   const handleInputKeyDown = (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      handleScannedCode(code);
+      onProcess();
     }
   };
 
-  const showHRControls = state.currentRole === "HR" || state.currentRole === "ADMIN";
-
   return (
-    <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
-      <audio ref={successBeepRef} src="/beep.wav" preload="auto" />
-      <audio ref={errorBeepRef} src="/error.wav" preload="auto" />
-      <Toast toast={toast} onClose={() => setToast(null)} />
+    <div className="min-h-dvh w-full overflow-x-hidden bg-slate-100">
+      <div className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col overflow-hidden bg-white shadow-xl">
+        <audio ref={successBeepRef} src="/beep.wav" preload="auto" />
+        <audio ref={errorBeepRef} src="/error.wav" preload="auto" />
+        <Toast toast={toast} onClose={() => setToast(null)} />
 
-      {mobileScannerOpen && (
-        <MobileScanner
-          onResult={handleScannedCode}
-          onClose={() => setMobileScannerOpen(false)}
-        />
-      )}
+        {mobileScannerOpen && (
+          <MobileScanner
+            onResult={handleScannedCode}
+            onClose={() => setMobileScannerOpen(false)}
+          />
+        )}
 
-      <div className="border-b border-slate-300 bg-[#23205C] px-4 py-4 text-white sm:px-5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold sm:text-xl">Dixon Dehradun Attendance</h2>
-            <p className="truncate text-xs text-white/70 sm:text-sm">Scanner panel with hall control</p>
-          </div>
-          <button type="button" className="md:hidden" onClick={() => setMenuOpen((v) => !v)}>
-            {menuOpen ? <X /> : <Menu />}
-          </button>
-        </div>
-      </div>
+        {/* <div className="sticky top-0 z-50 border-b border-slate-200 bg-white px-2 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-slate-500">
+                Attendance
+              </p>
+            </div>
 
-      <div className={`${menuOpen ? "block" : "hidden"} border-b border-slate-300 bg-slate-50 p-4 md:block sm:p-5`}>
-        {showHRControls && (
-          <div className="mb-5 border-2 border-[#E0222A] bg-[#E0222A]/5 p-4">
-            <div className="mb-3 text-sm font-bold text-[#E0222A]">HR Controls</div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <input
-                className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-                placeholder="Reason / override note"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-              <select
-                className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-                value={selectedHall}
-                onChange={(e) => setSelectedHall(e.target.value)}
-              >
-                {state.halls.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.name} ({h.capacity})
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center gap-1.5">
               <button
-                className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98]"
                 type="button"
-                onClick={onMove}
-                disabled={busy}
+                onClick={() => setMode((m) => (m === "scan" ? "manual" : "scan"))}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700"
+                title={mode === "scan" ? "Manual Mode" : "Scan Mode"}
               >
-                <ShieldAlert className="mr-1 inline h-4 w-4" />
-                Move Hall
+                <Keyboard className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileScannerOpen(true)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700"
+                title="Camera Scan"
+              >
+                <Camera className="h-4 w-4" />
               </button>
             </div>
+          </div>
+        </div> */}
+
+        <div className="border-b border-slate-200 bg-slate-50 px-3 py-1">
+          <div className="flex gap-2 overflow-x-auto pb-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <CompactStat label="Role" value={state.currentRole} />
+            {/* <CompactStat label="Selected" value={totals.selectedCount} /> */}
+            <CompactStat label="Capacity" value={totals.totalCapacity} />
+            <CompactStat
+              label="Status"
+              value={totals.locked ? "Locked" : "Open"}
+              tone={totals.locked ? "danger" : "success"}
+            />
+
+            <button
+              type="button"
+              onClick={() => setMode((m) => (m === "scan" ? "manual" : "scan"))}
+              className="shrink-0 rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700"
+            >
+              <Keyboard className="mr-1 inline h-3.5 w-3.5" />
+              {mode === "scan" ? "Manual" : "Scan"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileScannerOpen(true)}
+              className="shrink-0 rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700"
+            >
+              <Camera className="mr-1 inline h-3.5 w-3.5" />
+              Camera
+            </button>
+          </div>
+        </div>
+
+        {isHR && (
+          <div className="border-b border-slate-200 bg-slate-50 px-2 py-1">
+            <button
+              type="button"
+              className="mb-1 flex w-full items-center justify-between rounded border border-[#E0222A]/25 bg-white px-2.5 py-2 text-left text-xs font-bold text-[#E0222A]"
+              onClick={() => setShowHrControls((v) => !v)}
+            >
+              <span>HR Controls</span>
+              {showHrControls ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+
+            {showHrControls && (
+              <div className="grid grid-cols-1 gap-2">
+                <input
+                  className="w-full min-w-0 rounded border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-[#E0222A]"
+                  placeholder="Reason / override note"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+                <select
+                  className="w-full min-w-0 rounded border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-[#E0222A]"
+                  value={selectedHall}
+                  onChange={(e) => setSelectedHall(e.target.value)}
+                >
+                  {state.halls.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name} ({h.capacity})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="inline-flex items-center justify-center rounded bg-[#E0222A] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  type="button"
+                  onClick={onMove}
+                  disabled={busy}
+                >
+                  <ShieldAlert className="mr-1 inline h-4 w-4" />
+                  Move Hall
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <input
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            placeholder="Select employee code"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            onKeyDown={handleInputKeyDown}
-          />
-          <button
-            className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-            type="button"
-            onClick={() => setMode(mode === "scan" ? "manual" : "scan")}
-          >
-            <Keyboard className="mr-1 inline h-4 w-4" />
-            {mode === "scan" ? "Manual Mode" : "Scan Mode"}
-          </button>
-          <button
-            className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-            type="button"
-            onClick={() => setMobileScannerOpen(true)}
-          >
-            <Camera className="mr-1 inline h-4 w-4" />
-            Camera Scan
-          </button>
-          <button
-            className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98] disabled:opacity-50"
-            type="button"
-            onClick={() => onProcess()}
-            disabled={busy || !canScan}
-          >
-            {busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <ScanLine className="mr-1 inline h-4 w-4" />}
-            Process Entry
-          </button>
-        </div>
-      </div>
-
-      <div className="p-4 sm:p-5">
-        <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-4">
-          <div className="border-2 border-slate-300 bg-white p-5">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Role</div>
-            <div className="mt-2 text-xl font-bold text-slate-900">{state.currentRole}</div>
-          </div>
-          <div className="border-2 border-slate-300 bg-white p-5">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Selected Count</div>
-            <div className="mt-2 text-xl font-bold text-slate-900">{totals.selectedCount}</div>
-          </div>
-          <div className="border-2 border-slate-300 bg-white p-5">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Capacity</div>
-            <div className="mt-2 text-xl font-bold text-slate-900">{totals.totalCapacity}</div>
-          </div>
-          <div className="border-2 border-slate-300 bg-white p-5">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Status</div>
-            <div className={`mt-2 text-xl font-bold ${totals.locked ? "text-[#E0222A]" : "text-emerald-600"}`}>
-              {totals.locked ? "Locked" : "Open"}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <div className="border-2 border-slate-300 bg-white p-5">
-            <div className="flex items-center gap-2 font-bold text-slate-900">
-              <ScanBarcode className="h-4 w-4" />
-              Scanner / Manual Entry
-            </div>
-            <div className="mt-4 flex gap-3">
-              <input
-                ref={codeInputRef}
-                className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-                placeholder={mode === "manual" ? "Type punch code manually" : "Scan or type code"}
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                onKeyDown={handleInputKeyDown}
-              />
-              <button
-                className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-                type="button"
-                onClick={onQuickCopy}
-              >
-                <Copy className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-                type="button"
-                onClick={() => onProcess()}
-              >
-                Verify
-              </button>
-              <button
-                className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98] disabled:opacity-50"
-                type="button"
-                onClick={() => onProcess()}
-                disabled={busy || !canScan}
-              >
-                {busy ? "Saving..." : "Save Entry"}
-              </button>
-            </div>
-            <div className="mt-4 border-2 border-slate-300 bg-slate-50 px-4 py-2 text-sm text-slate-700">
-              Current hall of employee will be used automatically if space is available.
-            </div>
-            <div className="mt-4 text-sm text-slate-600">
-              Matched employee:{" "}
-              <span className="font-bold text-slate-900">
-                {empResult ? `${empResult.name} (${empResult.code}) - ${empResult.designation || "No designation"}` : "-"}
-              </span>
-            </div>
-          </div>
-
-          <div className="border-2 border-slate-300 bg-white p-5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 font-bold text-slate-900">
-                <CalendarDays className="h-4 w-4" />
-                Hall Load
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+            <div className="border border-slate-200 bg-white p-2.5">
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                <ScanBarcode className="h-4 w-4" />
+                Scanner / Manual Entry
               </div>
-              <button
-                className="border-2 border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
-                type="button"
-                onClick={() => setShowHistory((v) => !v)}
-              >
-                <Search className="mr-1 inline h-4 w-4" />
-                {showHistory ? "Hide Logs" : "Show Logs"}
-              </button>
+
+              <div className="mt-2 flex gap-2">
+                <input
+                  className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-[#E0222A]"
+                  placeholder={mode === "manual" ? "Type punch code manually" : "Scan or type code"}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  onKeyDown={handleInputKeyDown}
+                  ref={codeInputRef}
+                />
+                <button
+                  className="inline-flex items-center justify-center rounded border border-slate-300 bg-white px-2.5 py-2 text-slate-700"
+                  type="button"
+                  onClick={onQuickCopy}
+                  title="Copy code"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-2 flex gap-2">
+                <button
+                  className="flex-1 rounded border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-700"
+                  type="button"
+                  onClick={() => onProcess()}
+                >
+                  Verify
+                </button>
+                <button
+                  className="flex-1 rounded bg-[#E0222A] px-2.5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  type="button"
+                  onClick={() => onProcess()}
+                  disabled={busy || !canScan}
+                >
+                  {busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <ScanLine className="mr-1 inline h-4 w-4" />}
+                  Process
+                </button>
+              </div>
+
+            
+              <div className="mt-2 text-[11px] text-slate-600">
+                Matched: <span className="font-bold text-slate-900">{empResult ? `${empResult.name} (${empResult.code})` : "-"}</span>
+              </div>
             </div>
 
-            <div className="mt-4 space-y-4">
-              {hallUsage.map((h) => (
-                <div key={h.id} className="border-2 border-slate-300 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="font-bold text-slate-900">{h.name}</div>
-                    <div className={`text-sm font-bold ${h.full ? "text-[#E0222A]" : "text-slate-700"}`}>
-                      {h.used}/{h.capacity}
+            <div className="border border-slate-200 bg-white p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                  <CalendarDays className="h-4 w-4" />
+                  Hall Load
+                </div>
+                <button
+                  className="inline-flex items-center justify-center rounded border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700"
+                  type="button"
+                  onClick={() => setShowHistory((v) => !v)}
+                >
+                  <Search className="mr-1 inline h-4 w-4" />
+                  {showHistory ? "Hide" : "Logs"}
+                </button>
+              </div>
+
+              <div className="mt-2 max-h-[36vh] space-y-2 overflow-auto pr-1">
+                {hallUsage.map((h) => (
+                  <div key={h.id} className="border border-slate-200 p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-bold text-slate-900">{h.name}</div>
+                      <div className={`text-[11px] font-bold ${h.full ? "text-[#E0222A]" : "text-slate-700"}`}>
+                        {h.used}/{h.capacity}
+                      </div>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded border border-slate-200 bg-white">
+                      <div
+                        className={`h-2 ${h.full ? "bg-[#E0222A]" : "bg-slate-700"}`}
+                        style={{ width: `${Math.min(100, Math.round((h.used / Math.max(h.capacity, 1)) * 100))}%` }}
+                      />
                     </div>
                   </div>
-                  <div className="mt-3 h-2 border-2 border-slate-300 bg-white">
-                    <div
-                      className={`h-2 ${h.full ? "bg-[#E0222A]" : "bg-slate-700"}`}
-                      style={{ width: `${Math.min(100, Math.round((h.used / Math.max(h.capacity, 1)) * 100))}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
 
-        {showHistory && (showHRControls || state.currentRole === "ADMIN") && (
-          <div className="mt-5 border-2 border-slate-300 bg-white p-5">
-            <div className="mb-4 text-sm font-bold text-slate-900">Recent Entries</div>
-            <div className="mb-4">
+          {showHistory && (isHR || state.currentRole === "ADMIN") && (
+            <div className="mt-2 border border-slate-200 bg-white p-2.5">
+              <div className="mb-2 text-sm font-bold text-slate-900">Recent Entries</div>
               <input
-                className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-                placeholder="Search entries (name, code, designation, hall)"
+                className="mb-2 w-full rounded border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-900 outline-none focus:border-[#E0222A]"
+                placeholder="Search entries"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
-            </div>
-            <div className="max-h-[360px] overflow-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Time</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Code</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Name</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Designation</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Hall</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Source</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentRows.length ? (
-                    recentRows.slice(0, 25).map((r) => (
-                      <tr key={r.id} className="border-b border-slate-200">
-                        <td className="px-3 py-2 text-sm text-slate-700">{r.time || "-"}</td>
-                        <td className="px-3 py-2 text-sm font-semibold text-slate-900">{r.code}</td>
-                        <td className="px-3 py-2 text-sm text-slate-900">{r.name}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{r.designation || "-"}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{r.hallName}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{r.source}</td>
-                        <td className="px-3 py-2 text-sm text-slate-500">{r.overrideReason || "-"}</td>
-                      </tr>
-                    ))
-                  ) : (
+
+              <div className="max-h-[22vh] overflow-auto rounded border border-slate-200">
+                <table className="min-w-full">
+                  <thead>
                     <tr>
-                      <td colSpan="7" className="py-8 text-center text-sm text-slate-500">
-                        No records found.
-                      </td>
+                      <th className="sticky top-0 border-b bg-white px-2 py-2 text-left text-[10px] font-semibold text-slate-700">Time</th>
+                      <th className="sticky top-0 border-b bg-white px-2 py-2 text-left text-[10px] font-semibold text-slate-700">Code</th>
+                      <th className="sticky top-0 border-b bg-white px-2 py-2 text-left text-[10px] font-semibold text-slate-700">Name</th>
+                      <th className="sticky top-0 border-b bg-white px-2 py-2 text-left text-[10px] font-semibold text-slate-700">Hall</th>
+                      <th className="sticky top-0 border-b bg-white px-2 py-2 text-left text-[10px] font-semibold text-slate-700">Src</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {recentRows.length ? (
+                      recentRows.slice(0, 12).map((r) => (
+                        <tr key={r.id} className="border-b border-slate-200">
+                          <td className="px-2 py-2 text-[10px] text-slate-700">{r.time || "-"}</td>
+                          <td className="px-2 py-2 text-[10px] font-semibold text-slate-900">{r.code}</td>
+                          <td className="px-2 py-2 text-[10px] text-slate-900">{r.name}</td>
+                          <td className="px-2 py-2 text-[10px] text-slate-700">{r.hallName}</td>
+                          <td className="px-2 py-2 text-[10px] text-slate-700">{r.source}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="5" className="py-5 text-center text-xs text-slate-500">
+                          No records found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

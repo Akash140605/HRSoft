@@ -8,25 +8,23 @@ import HRLogsPanel from "./components/HRLogsPanel";
 import HallManager from "./components/HallManager";
 import LoginScreen from "./components/LoginScreen";
 import HRTrainingRoute from "./pages/HRTrainingRoute";
-import { Menu, X } from "lucide-react";
 
 function DashboardApp() {
   const { state, logout } = useHR();
   const [activeTab, setActiveTab] = useState("scanner");
-  const [tabsOpen, setTabsOpen] = useState(false);
   const [guestTrainingOpen, setGuestTrainingOpen] = useState(false);
 
-  const showRoster = state.currentRole === "HR" || state.currentRole === "ADMIN";
-  const showHRLogs = state.currentRole === "ADMIN";
-  const showTracker = state.currentRole === "ADMIN";
-  const showEntryTable = state.currentRole === "HR" || state.currentRole === "ADMIN";
-  const showHallManager = state.currentRole === "HR" || state.currentRole === "ADMIN";
-  const isGuest = state.currentRole === "GUEST";
+  const role = state.currentRole || "GUEST";
+  const showRoster = role === "HR" || role === "ADMIN";
+  const showHRLogs = role === "ADMIN";
+  const showTracker = role === "ADMIN";
+  const showEntryTable = role === "HR" || role === "ADMIN";
+  const showHallManager = role === "HR" || role === "ADMIN";
+  const isGuest = role === "GUEST";
 
   useEffect(() => {
     if (isGuest) {
       setActiveTab("scanner");
-      setTabsOpen(false);
     } else {
       setGuestTrainingOpen(false);
     }
@@ -40,9 +38,9 @@ function DashboardApp() {
 
     if (showEntryTable) base.push({ key: "entries", label: "Entries" });
     if (showRoster) base.push({ key: "roster", label: "Roster" });
-    if (showHallManager) base.push({ key: "hall", label: "Hall Manager" });
+    if (showHallManager) base.push({ key: "hall", label: "Hall" });
     if (showTracker) base.push({ key: "tracker", label: "Tracker" });
-    if (showHRLogs) base.push({ key: "logs", label: "HR Logs" });
+    if (showHRLogs) base.push({ key: "logs", label: "Logs" });
 
     return base;
   }, [showEntryTable, showHRLogs, showRoster, showTracker, showHallManager]);
@@ -51,7 +49,7 @@ function DashboardApp() {
     switch (activeTab) {
       case "training":
         return (
-          <div className="h-screen overflow-hidden">
+          <div className="h-full min-h-0 overflow-hidden">
             <HRTrainingRoute />
           </div>
         );
@@ -73,11 +71,9 @@ function DashboardApp() {
 
   const selectTab = (key) => {
     setActiveTab(key);
-    setTabsOpen(false);
   };
 
   const handleLogout = async () => {
-    setTabsOpen(false);
     setActiveTab("scanner");
     setGuestTrainingOpen(false);
     await logout();
@@ -85,23 +81,25 @@ function DashboardApp() {
 
   if (isGuest && guestTrainingOpen) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 md:px-6">
-          <img
-            src="/logod.png"
-            alt="Dixon"
-            className="block h-9 w-auto max-w-[55vw] object-contain sm:h-10 md:h-12"
-          />
-          <button
-            type="button"
-            onClick={() => setGuestTrainingOpen(false)}
-            className="border-2 border-[#23205C] bg-[#23205C] px-4 py-2 text-sm font-semibold text-white"
-          >
-            Back to Login
-          </button>
+      <div className="flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900">
+        <div className="shrink-0 border-b border-slate-200 bg-white px-2 py-2 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <img
+              src="/logod.png"
+              alt="Dixon"
+              className="block h-8 w-auto max-w-[44vw] object-contain"
+            />
+            <button
+              type="button"
+              onClick={() => setGuestTrainingOpen(false)}
+              className="rounded border-2 border-[#23205C] bg-[#23205C] px-3 py-1.5 text-xs font-semibold text-white"
+            >
+              Back
+            </button>
+          </div>
         </div>
 
-        <div className="h-[calc(100vh-73px)] overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
           <HRTrainingRoute />
         </div>
       </div>
@@ -113,48 +111,34 @@ function DashboardApp() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden overflow-y-auto bg-slate-50 text-slate-900">
-      <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200 bg-white shadow-sm">
-        <div className="box-border flex w-full items-center justify-between px-4 py-3 md:px-6">
+    <div className="fixed inset-0 flex h-dvh w-full flex-col overflow-hidden bg-slate-50 text-slate-900">
+      <header className="shrink-0 border-b border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between gap-2 px-2 py-2">
           <img
             src="/logod.png"
             alt="Dixon"
-            className="block h-9 w-auto max-w-[55vw] object-contain sm:h-10 md:h-12"
+            className="block h-8 w-auto max-w-[44vw] object-contain"
           />
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="inline-flex items-center justify-center border-2 border-slate-300 bg-white px-3 py-2 text-slate-700 md:hidden"
-              onClick={() => setTabsOpen((v) => !v)}
-            >
-              {tabsOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="inline-flex shrink-0 items-center justify-center border-2 border-[#E0222A] bg-[#E0222A] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#E0222A]/25 transition hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98]"
-            >
-              Logout
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="inline-flex shrink-0 items-center justify-center rounded border-2 border-[#E0222A] bg-[#E0222A] px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+          >
+            Logout
+          </button>
         </div>
 
-        <div
-          className={`border-t border-slate-200 bg-white px-4 md:px-6 ${
-            tabsOpen ? "block" : "hidden"
-          } md:block`}
-        >
-          <div className="flex flex-col gap-5 py-4 md:flex-row md:flex-wrap md:items-center">
+        <div className="border-t border-slate-200 bg-white px-2 py-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {tabs.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => selectTab(tab.key)}
-                className={`w-full border-2 px-4 py-2 text-sm font-semibold transition md:w-auto ${
+                className={`shrink-0 rounded border px-3 py-1.5 text-xs font-semibold transition ${
                   activeTab === tab.key
                     ? "border-[#23205C] bg-[#23205C] text-white"
-                    : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
+                    : "border-slate-300 bg-white text-slate-700"
                 }`}
               >
                 {tab.label}
@@ -164,8 +148,10 @@ function DashboardApp() {
         </div>
       </header>
 
-      <main className="w-full px-4 py-6 pt-24 md:px-6 md:pt-40">
-        <div className="grid grid-cols-1 gap-6">{renderTab()}</div>
+      <main className="min-h-0 flex-1 overflow-hidden px-2 py-2">
+        <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-hidden">
+          {renderTab()}
+        </div>
       </main>
     </div>
   );
