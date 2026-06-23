@@ -306,12 +306,33 @@ export function HRProvider({ children }) {
     }));
   }, []);
 
-  const pushLog = useCallback((row) => {
-    updateState((prev) => ({
-      ...prev,
-      logs: [row, ...prev.logs],
-    }));
-  }, [updateState]);
+  const pushLog = useCallback(
+    async (row) => {
+      const normalized = {
+        type: row.type || "",
+        message: row.message || "",
+        by: row.by || "",
+        employee_code: row.employeeCode || "",
+        hall_id: row.hallId || "",
+        hall_name: row.hallName || "",
+        override_reason: row.overrideReason || "",
+        at: row.at || new Date().toISOString(),
+      };
+
+      const res = await hrApi.addLog(normalized);
+      const localRow = { ...makeLogRow(row.type, row.message, row), ...row };
+
+      setState((prev) => ({
+        ...prev,
+        logs: res?.success
+          ? [makeLogRow(row.type, row.message, { ...row, id: res.data?.id || localRow.id }), ...prev.logs]
+          : [localRow, ...prev.logs],
+      }));
+
+      return res;
+    },
+    []
+  );
 
   const refreshAfterWrite = useCallback(async () => {
     await fetchAllDataFromAPI();
@@ -459,9 +480,21 @@ export function HRProvider({ children }) {
         ],
       }));
 
+      await pushLog({
+        type: "HR_OVERRIDE",
+        message: `${emp.name} -> ${hall.name} | ${reasonTag}`,
+        by: state.currentUser?.username || "",
+        employeeCode: emp.code,
+        hallId: hall.id,
+        hallName: hall.name,
+        overrideReason: apiRes.data?.override_reason || reasonTag,
+        at: apiRes.data?.date || new Date().toISOString(),
+        id: newEntry.id || Date.now(),
+      });
+
       return { ok: true, entry: newEntry, text: `HR override saved for ${emp.name}.` };
     },
-    [canOverride, employeeMap, isInShift, state.currentUser?.username, state.halls, state.selectedDate]
+    [canOverride, employeeMap, isInShift, pushLog, state.currentUser?.username, state.halls, state.selectedDate]
   );
 
   const moveEmployeeToHall = useCallback(
@@ -498,6 +531,15 @@ export function HRProvider({ children }) {
       if (!apiRes?.success) return { ok: false, text: apiRes?.error || "Failed", type: "error" };
 
       const newEntry = normalizeEntry(apiRes.data);
+      const logRow = makeLogRow("HR_TRANSFER", `${emp.name} -> ${hall.name} | ${reasonTag}`, {
+        by: state.currentUser?.username || "",
+        employeeCode: emp.code,
+        hallId: hall.id,
+        hallName: hall.name,
+        overrideReason: apiRes.data?.override_reason || reasonTag,
+        at: apiRes.data?.date || new Date().toISOString(),
+        id: newEntry.id || Date.now(),
+      });
 
       setState((prev) => ({
         ...prev,
@@ -512,24 +554,15 @@ export function HRProvider({ children }) {
               )
           ),
         ],
-        logs: [
-          makeLogRow("HR_TRANSFER", `${emp.name} -> ${hall.name} | ${reasonTag}`, {
-            by: prev.currentUser?.username || "",
-            employeeCode: emp.code,
-            hallId: hall.id,
-            hallName: hall.name,
-            overrideReason: newEntry.overrideReason || reasonTag,
-            at: newEntry.date || new Date().toISOString(),
-            id: newEntry.id || Date.now(),
-          }),
-          ...prev.logs,
-        ],
+        logs: [logRow, ...prev.logs],
       }));
 
+      await pushLog(logRow);
       await deleteOldScanEntriesByCode(emp.code);
+
       return { ok: true, entry: newEntry, text: `${emp.name} moved to ${hall.name}.` };
     },
-    [canOverride, deleteOldScanEntriesByCode, employeeMap, isInShift, state.currentUser?.username, state.halls, state.selectedDate]
+    [canOverride, deleteOldScanEntriesByCode, employeeMap, isInShift, pushLog, state.currentUser?.username, state.halls, state.selectedDate]
   );
 
   const getAttendanceTracker = useCallback(() => {

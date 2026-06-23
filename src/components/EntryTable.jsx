@@ -37,7 +37,7 @@ const toTime = (dateStr, endOfDay = false) => {
 };
 
 export default function EntryTable() {
-  const { state, setState, moveEmployeeToHall } = useHR();
+  const { state, setState, moveEmployeeToHall, refreshAfterWrite } = useHR();
 
   const [query, setQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -175,26 +175,6 @@ export default function EntryTable() {
     }
   };
 
-  const removeOldScanEntriesByCode = async (code) => {
-    const current = Array.isArray(state.entries) ? state.entries : [];
-    const oldScans = current.filter(
-      (e) => String(e.code).trim() === String(code).trim() && String(e.source || "") === "SCAN"
-    );
-
-    if (!oldScans.length) return;
-
-    setState((prev) => ({
-      ...prev,
-      entries: prev.entries.filter(
-        (e) => !(String(e.code).trim() === String(code).trim() && String(e.source || "") === "SCAN")
-      ),
-    }));
-
-    await Promise.allSettled(
-      oldScans.map((entry) => (entry.id != null ? hrApi.deleteEntry(entry.id) : Promise.resolve()))
-    );
-  };
-
   const onMove = async () => {
     if (!moveCode.trim() || !moveReason.trim()) {
       alert("Code aur reason required hai.");
@@ -212,10 +192,10 @@ export default function EntryTable() {
       alert(res.text || (res.ok ? "Moved successfully" : "Failed"));
 
       if (res.ok) {
-        await removeOldScanEntriesByCode(moveCode.trim());
-        setRefreshKey((k) => k + 1);
         setMoveCode("");
         setMoveReason("");
+        setRefreshKey((k) => k + 1);
+        await refreshAfterWrite();
       }
     } finally {
       setLoading(false);
