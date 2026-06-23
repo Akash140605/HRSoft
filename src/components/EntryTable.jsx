@@ -9,9 +9,11 @@ import {
   Eye,
   Loader2,
   RefreshCw,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useHR } from "../context/HRContext";
 import hrApi from "../api/hrApi";
+import * as XLSX from "xlsx";
 
 const normalizeEntry = (entry) => ({
   ...entry,
@@ -147,6 +149,30 @@ export default function EntryTable() {
     URL.revokeObjectURL(url);
   };
 
+  const exportExcel = () => {
+    const data = rows.map((r) => ({
+      Date: String(r.date).slice(0, 10),
+      Day: r.day || "",
+      Time: r.time || "",
+      Code: r.code || "",
+      Name: r.name || "",
+      Designation: r.designation || "",
+      Shift: r.shift || "",
+      WeekOff: r.weekOff || "",
+      HallId: r.hallId || "",
+      HallName: r.hallName || "",
+      Source: r.source || "",
+      HrCode: r.hrCode || "",
+      HrAction: r.hrAction || "",
+      OverrideReason: r.overrideReason || "",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+    XLSX.writeFile(wb, "attendance-sheet.xlsx");
+  };
+
   const copyRow = async (r) => {
     const text = `${r.code} | ${r.name} | ${r.designation} | ${r.hallName} | ${r.source}`;
     try {
@@ -214,27 +240,29 @@ export default function EntryTable() {
 
   const refresh = () => setRefreshKey((k) => k + 1);
 
+  const mobileRows = rows;
+
   return (
     <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
-      <div className="border-b border-slate-300 bg-[#23205C] px-5 py-4">
+      <div className="border-b border-slate-300 bg-[#23205C] px-3 py-3 sm:px-5 sm:py-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white">Attendance Sheet</h2>
-            <p className="mt-1 text-sm text-white/70">
+            <h2 className="text-lg font-bold text-white sm:text-xl">Attendance Sheet</h2>
+            <p className="mt-1 text-xs text-white/70 sm:text-sm">
               Search, filter, export, and HR hall transfer.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
-              className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              className="border border-white/30 bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20 sm:px-4 sm:text-sm"
               onClick={clearFilters}
               type="button"
             >
               <Filter className="mr-1 inline h-4 w-4" />
-              Clear Filters
+              Clear
             </button>
             <button
-              className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              className="border border-white/30 bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20 sm:px-4 sm:text-sm"
               onClick={refresh}
               type="button"
             >
@@ -242,23 +270,31 @@ export default function EntryTable() {
               Refresh
             </button>
             <button
-              className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              className="border border-white/30 bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20 sm:px-4 sm:text-sm"
               onClick={exportCsv}
               type="button"
             >
               <Download className="mr-1 inline h-4 w-4" />
-              Export CSV
+              CSV
+            </button>
+            <button
+              className="border border-white/30 bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20 sm:px-4 sm:text-sm"
+              onClick={exportExcel}
+              type="button"
+            >
+              <FileSpreadsheet className="mr-1 inline h-4 w-4" />
+              Excel
             </button>
           </div>
         </div>
       </div>
 
-      <div className="border-b border-slate-300 bg-slate-50 p-4">
+      <div className="border-b border-slate-300 bg-slate-50 p-3 sm:p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
           <div className="relative md:col-span-2">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
-              className="w-full border-2 border-slate-300 bg-white px-4 py-3 pl-9 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+              className="w-full rounded border-2 border-slate-300 bg-white px-4 py-3 pl-9 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search attendance"
@@ -267,20 +303,20 @@ export default function EntryTable() {
 
           <input
             type="date"
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
           />
 
           <input
             type="date"
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
           />
 
           <select
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
           >
@@ -291,7 +327,7 @@ export default function EntryTable() {
           </select>
 
           <select
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={hallFilter}
             onChange={(e) => setHallFilter(e.target.value)}
           >
@@ -304,7 +340,7 @@ export default function EntryTable() {
           </select>
 
           <select
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={shiftFilter}
             onChange={(e) => setShiftFilter(e.target.value)}
           >
@@ -317,21 +353,21 @@ export default function EntryTable() {
           </select>
 
           <input
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
+            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
             value={reasonFilter}
             onChange={(e) => setReasonFilter(e.target.value)}
             placeholder="Filter by reason"
           />
 
           <input
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={moveCode}
             onChange={(e) => setMoveCode(e.target.value)}
             placeholder="Employee code for transfer"
           />
 
           <select
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             value={moveHallId}
             onChange={(e) => setMoveHallId(e.target.value)}
           >
@@ -343,14 +379,14 @@ export default function EntryTable() {
           </select>
 
           <input
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
+            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
             value={moveReason}
             onChange={(e) => setMoveReason(e.target.value)}
             placeholder="Reason for hall move"
           />
 
           <button
-            className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] hover:shadow-[#E0222A]/30 active:scale-[0.98] md:col-span-2 disabled:opacity-50"
+            className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 md:col-span-2"
             type="button"
             onClick={onMove}
             disabled={loading}
@@ -365,127 +401,205 @@ export default function EntryTable() {
         </div>
       </div>
 
-      <div className="px-4 pt-4">
+      <div className="px-3 pt-3 sm:px-4">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="border-2 border-slate-300 bg-white p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <div className="border-2 border-slate-300 bg-white p-3 sm:p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">
               Total Rows
             </div>
-            <div className="mt-2 text-xl font-bold text-slate-900">{rows.length}</div>
+            <div className="mt-2 text-lg font-bold text-slate-900 sm:text-xl">{rows.length}</div>
           </div>
-          <div className="border-2 border-slate-300 bg-white p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <div className="border-2 border-slate-300 bg-white p-3 sm:p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">
               Halls Used
             </div>
-            <div className="mt-2 text-xl font-bold text-slate-900">
+            <div className="mt-2 text-lg font-bold text-slate-900 sm:text-xl">
               {new Set(rows.map((r) => r.hallId)).size}
             </div>
           </div>
-          <div className="border-2 border-slate-300 bg-white p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <div className="border-2 border-slate-300 bg-white p-3 sm:p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">
               HR Entries
             </div>
-            <div className="mt-2 text-xl font-bold text-slate-900">
+            <div className="mt-2 text-lg font-bold text-slate-900 sm:text-xl">
               {rows.filter((r) => r.source !== "SCAN").length}
             </div>
           </div>
-          <div className="border-2 border-slate-300 bg-white p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <div className="border-2 border-slate-300 bg-white p-3 sm:p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">
               Scan Entries
             </div>
-            <div className="mt-2 text-xl font-bold text-slate-900">
+            <div className="mt-2 text-lg font-bold text-slate-900 sm:text-xl">
               {rows.filter((r) => r.source === "SCAN").length}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="mt-4 max-h-[520px] overflow-auto">
-        <table className="min-w-full">
-          <thead>
-            <tr>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Date</th>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Day</th>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Time</th>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Code</th>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Name</th>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Designation</th>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Shift</th>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Hall</th>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Source</th>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Reason</th>
-              <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Action</th>
-            </tr>
-          </thead>
+      <div className="mt-3 px-3 pb-3 sm:px-4">
+        <div className="hidden md:block">
+          <div className="max-h-[520px] overflow-auto rounded border border-slate-200">
+            <table className="min-w-full">
+              <thead>
+                <tr>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Date</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Day</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Time</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Code</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Name</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Designation</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Shift</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Hall</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Source</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Reason</th>
+                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length ? (
+                  rows.map((r) => (
+                    <tr
+                      key={`${r.id}-${r.code}-${r.time}-${r.name}-${r.hallId}`}
+                      className={String(selectedRow) === String(r.id) ? "bg-slate-100" : "border-b border-slate-200"}
+                      onClick={() => setSelectedRow(r.id)}
+                    >
+                      <td className="px-3 py-3 text-sm text-slate-700">{String(r.date).slice(0, 10)}</td>
+                      <td className="px-3 py-3 text-sm text-slate-700">{r.day}</td>
+                      <td className="px-3 py-3 text-sm text-slate-700">{r.time}</td>
+                      <td className="px-3 py-3 text-sm font-bold text-slate-900">{r.code}</td>
+                      <td className="px-3 py-3 text-sm text-slate-900">{r.name}</td>
+                      <td className="px-3 py-3 text-sm text-slate-700">{r.designation || "-"}</td>
+                      <td className="px-3 py-3 text-sm text-slate-700">{r.shift}</td>
+                      <td className="px-3 py-3 text-sm">
+                        <span className="border border-slate-300 bg-white px-2 py-1 text-slate-700">
+                          {r.hallName}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-sm">
+                        <span
+                          className={
+                            r.source === "SCAN"
+                              ? "border border-emerald-300 bg-emerald-50 px-2 py-1 text-emerald-700"
+                              : "border border-[#E0222A] bg-[#E0222A]/10 px-2 py-1 text-[#E0222A]"
+                          }
+                        >
+                          {r.source}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-sm text-slate-500">{r.overrideReason || "-"}</td>
+                      <td className="px-3 py-3 text-sm">
+                        <div className="flex gap-2">
+                          <button
+                            className="border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+                            type="button"
+                            onClick={() => copyRow(r)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </button>
+                          <button
+                            className="border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+                            type="button"
+                            onClick={() => setSelectedRow(r.id)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            className="border border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 font-semibold text-[#E0222A] hover:bg-[#E0222A]/20"
+                            onClick={() => removeEntry(r.id)}
+                            type="button"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="11" className="py-10 text-center text-sm text-slate-500">
+                      No attendance records found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-          <tbody>
-            {rows.length ? (
-              rows.map((r) => (
-                <tr
-                  key={`${r.id}-${r.code}-${r.time}-${r.name}-${r.hallId}`}
-                  className={String(selectedRow) === String(r.id) ? "bg-slate-100" : "border-b border-slate-200"}
-                  onClick={() => setSelectedRow(r.id)}
-                >
-                  <td className="px-3 py-3 text-sm text-slate-700">{String(r.date).slice(0, 10)}</td>
-                  <td className="px-3 py-3 text-sm text-slate-700">{r.day}</td>
-                  <td className="px-3 py-3 text-sm text-slate-700">{r.time}</td>
-                  <td className="px-3 py-3 text-sm font-bold text-slate-900">{r.code}</td>
-                  <td className="px-3 py-3 text-sm text-slate-900">{r.name}</td>
-                  <td className="px-3 py-3 text-sm text-slate-700">{r.designation || "-"}</td>
-                  <td className="px-3 py-3 text-sm text-slate-700">{r.shift}</td>
-                  <td className="px-3 py-3 text-sm">
-                    <span className="border-2 border-slate-300 bg-white px-2 py-1 text-slate-700">
+        <div className="grid gap-3 md:hidden">
+          {mobileRows.length ? (
+            mobileRows.map((r) => (
+              <div
+                key={`${r.id}-${r.code}-${r.time}-${r.name}`}
+                className={`rounded border p-3 ${String(selectedRow) === String(r.id) ? "border-slate-400 bg-slate-50" : "border-slate-200 bg-white"}`}
+                onClick={() => setSelectedRow(r.id)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs text-slate-500">
+                      {String(r.date).slice(0, 10)} • {r.day} • {r.time}
+                    </div>
+                    <div className="mt-1 text-sm font-bold text-slate-900">
+                      {r.name}
+                    </div>
+                    <div className="text-xs text-slate-700">
+                      {r.code} • {r.designation || "-"} • {r.shift || "-"}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700">
                       {r.hallName}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-sm">
-                    <span
-                      className={
+                    </div>
+                    <div
+                      className={`mt-2 inline-block rounded px-2 py-1 text-[10px] font-semibold ${
                         r.source === "SCAN"
-                          ? "border-2 border-emerald-300 bg-emerald-50 px-2 py-1 text-emerald-700"
-                          : "border-2 border-[#E0222A] bg-[#E0222A]/10 px-2 py-1 text-[#E0222A]"
-                      }
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-[#E0222A]/10 text-[#E0222A]"
+                      }`}
                     >
                       {r.source}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-sm text-slate-500">{r.overrideReason || "-"}</td>
-                  <td className="px-3 py-3 text-sm">
-                    <div className="flex gap-2">
-                      <button
-                        className="border-2 border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
-                        type="button"
-                        onClick={() => copyRow(r)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
-                      <button
-                        className="border-2 border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
-                        type="button"
-                        onClick={() => setSelectedRow(r.id)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button
-                        className="border-2 border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 font-semibold text-[#E0222A] hover:bg-[#E0222A]/20"
-                        onClick={() => removeEntry(r.id)}
-                        type="button"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
                     </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="11" className="py-10 text-center text-sm text-slate-500">
-                  No attendance records found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  </div>
+                </div>
+
+                <div className="mt-2 text-xs text-slate-500">
+                  {r.overrideReason || "-"}
+                </div>
+
+                <div className="mt-3 flex gap-2">
+                  <button
+                    className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                    type="button"
+                    onClick={() => copyRow(r)}
+                  >
+                    <Copy className="mr-1 inline h-4 w-4" />
+                    Copy
+                  </button>
+                  <button
+                    className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                    type="button"
+                    onClick={() => setSelectedRow(r.id)}
+                  >
+                    <Eye className="mr-1 inline h-4 w-4" />
+                    View
+                  </button>
+                  <button
+                    className="flex-1 rounded border border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 text-sm font-semibold text-[#E0222A]"
+                    onClick={() => removeEntry(r.id)}
+                    type="button"
+                  >
+                    <Trash2 className="mr-1 inline h-4 w-4" />
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded border border-slate-200 bg-white p-4 text-center text-sm text-slate-500">
+              No attendance records found.
+            </div>
+          )}
+        </div>
       </div>
 
       {selectedRow ? (

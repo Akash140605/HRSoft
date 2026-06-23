@@ -231,146 +231,148 @@ export default function HallManager() {
         </div>
       </div>
 
-      <div className="space-y-4 p-5">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          {shiftSummary.map((shift) => (
-            <div key={shift.code} className="border-2 border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{shift.label}</div>
-              <div className="mt-1 text-xl font-bold text-slate-900">{shift.count}</div>
-              <div className="text-xs text-slate-500">
-                {shift.start} - {shift.end}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {hallSummary.length ? (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {hallSummary.map((hall, index) => {
-              const capacity = Number(hall.capacity ?? 0);
-              const used = Number(hall.used ?? 0);
-              const rosterAssigned = Number(hall.rosterAssigned ?? 0);
-              const effectiveCapacity = Number(hall.effectiveCapacity ?? capacity);
-              const percentage = effectiveCapacity > 0 ? Math.min((used / effectiveCapacity) * 100, 100) : 0;
-              const hallName = hall.name || `Hall ${index + 1}`;
-              const isOpen = openHallId === hall.id;
-              const accent = accentMap[hall.color] || accentMap.blue;
-              const styleClass = isOpen ? `${accent.border} ${accent.ring} shadow-lg` : "border-slate-200 shadow-sm";
-              const shiftBreakdown = hallShiftBreakdown.find((x) => String(x.hallId) === String(hall.id))?.counts || {};
-
-              return (
-                <div key={hall.id} className={`overflow-hidden border-2 bg-white transition ${styleClass}`}>
-                  <button type="button" onClick={() => handleToggle(hall.id)} className="w-full text-left">
-                    <div className="flex items-center justify-between gap-3 bg-gradient-to-r from-white to-slate-50 px-4 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center border-2 border-[#23205C]/10 bg-[#23205C]/5 text-[#23205C]">
-                          <Building2 className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-base font-bold text-slate-900">{hallName}</h3>
-                            <span className={`px-2 py-0.5 text-xs font-semibold ${accent.soft}`}>
-                              Hall #{index + 1}
-                            </span>
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500">Click to manage hall details</div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 text-slate-600">
-                        <div className="text-right">
-                          <div className="text-sm font-bold text-slate-900">
-                            Used {used} / {effectiveCapacity}
-                          </div>
-                          <div className="text-xs text-slate-500">Roster {rosterAssigned} assigned</div>
-                        </div>
-                        {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                      </div>
-                    </div>
-                  </button>
-
-                  <div className="px-4 pb-4">
-                    <div className="mb-3">
-                      <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
-                        <span>Occupancy</span>
-                        <span>{Math.round(percentage)}%</span>
-                      </div>
-                      <div className="h-2 overflow-hidden bg-slate-200">
-                        <div
-                          className={`h-full ${colorMap[hall.color] || "bg-[#23205C]"}`}
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                      {SHIFT_OPTIONS.map((shift) => (
-                        <div key={shift.code} className="border border-slate-200 bg-slate-50 px-2 py-2 text-center">
-                          <div className="font-semibold text-slate-700">{shift.code}</div>
-                          <div className="text-slate-500">{shiftBreakdown[shift.code] || 0}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {isOpen && (
-                      <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-200 pt-4 sm:grid-cols-3 xl:grid-cols-4">
-                        <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-600">Hall name</label>
-                          <input
-                            value={hall.name || ""}
-                            onChange={(e) => updateHall(hall.id, { name: e.target.value })}
-                            className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
-                            placeholder="Hall name"
-                            disabled={loading}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-600">Base capacity</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={hall.capacity ?? 0}
-                            onChange={(e) => updateHall(hall.id, { capacity: Number(e.target.value) })}
-                            className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
-                            placeholder="Capacity"
-                            disabled={loading}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-600">Color</label>
-                          <select
-                            value={hall.color || "blue"}
-                            onChange={(e) => updateHall(hall.id, { color: e.target.value })}
-                            className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
-                            disabled={loading}
-                          >
-                            {Object.keys(colorMap).map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="flex items-end">
-                          <div className={`w-full border-2 px-4 py-2 text-center text-sm font-semibold ${accent.soft}`}>
-                            Editable fields
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+      <div className="max-h-[78vh] overflow-y-auto p-5">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {shiftSummary.map((shift) => (
+              <div key={shift.code} className="border-2 border-slate-200 bg-white p-4 shadow-sm">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{shift.label}</div>
+                <div className="mt-1 text-xl font-bold text-slate-900">{shift.count}</div>
+                <div className="text-xs text-slate-500">
+                  {shift.start} - {shift.end}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
-        ) : (
-          <div className="border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-            No halls added yet.
-          </div>
-        )}
+
+          {hallSummary.length ? (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {hallSummary.map((hall, index) => {
+                const capacity = Number(hall.capacity ?? 0);
+                const used = Number(hall.used ?? 0);
+                const rosterAssigned = Number(hall.rosterAssigned ?? 0);
+                const effectiveCapacity = Number(hall.effectiveCapacity ?? capacity);
+                const percentage = effectiveCapacity > 0 ? Math.min((used / effectiveCapacity) * 100, 100) : 0;
+                const hallName = hall.name || `Hall ${index + 1}`;
+                const isOpen = openHallId === hall.id;
+                const accent = accentMap[hall.color] || accentMap.blue;
+                const styleClass = isOpen ? `${accent.border} ${accent.ring} shadow-lg` : "border-slate-200 shadow-sm";
+                const shiftBreakdown = hallShiftBreakdown.find((x) => String(x.hallId) === String(hall.id))?.counts || {};
+
+                return (
+                  <div key={hall.id} className={`overflow-hidden border-2 bg-white transition ${styleClass}`}>
+                    <button type="button" onClick={() => handleToggle(hall.id)} className="w-full text-left">
+                      <div className="flex items-center justify-between gap-3 bg-gradient-to-r from-white to-slate-50 px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-12 w-12 items-center justify-center border-2 border-[#23205C]/10 bg-[#23205C]/5 text-[#23205C]">
+                            <Building2 className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-bold text-slate-900">{hallName}</h3>
+                              <span className={`px-2 py-0.5 text-xs font-semibold ${accent.soft}`}>
+                                Hall #{index + 1}
+                              </span>
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">Click to manage hall details</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <div className="text-right">
+                            <div className="text-sm font-bold text-slate-900">
+                              Used {used} / {effectiveCapacity}
+                            </div>
+                            <div className="text-xs text-slate-500">Roster {rosterAssigned} assigned</div>
+                          </div>
+                          {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                        </div>
+                      </div>
+                    </button>
+
+                    <div className="px-4 pb-4">
+                      <div className="mb-3">
+                        <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+                          <span>Occupancy</span>
+                          <span>{Math.round(percentage)}%</span>
+                        </div>
+                        <div className="h-2 overflow-hidden bg-slate-200">
+                          <div
+                            className={`h-full ${colorMap[hall.color] || "bg-[#23205C]"}`}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                        {SHIFT_OPTIONS.map((shift) => (
+                          <div key={shift.code} className="border border-slate-200 bg-slate-50 px-2 py-2 text-center">
+                            <div className="font-semibold text-slate-700">{shift.code}</div>
+                            <div className="text-slate-500">{shiftBreakdown[shift.code] || 0}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {isOpen && (
+                        <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-200 pt-4 sm:grid-cols-3 xl:grid-cols-4">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">Hall name</label>
+                            <input
+                              value={hall.name || ""}
+                              onChange={(e) => updateHall(hall.id, { name: e.target.value })}
+                              className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
+                              placeholder="Hall name"
+                              disabled={loading}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">Base capacity</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={hall.capacity ?? 0}
+                              onChange={(e) => updateHall(hall.id, { capacity: Number(e.target.value) })}
+                              className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
+                              placeholder="Capacity"
+                              disabled={loading}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">Color</label>
+                            <select
+                              value={hall.color || "blue"}
+                              onChange={(e) => updateHall(hall.id, { color: e.target.value })}
+                              className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
+                              disabled={loading}
+                            >
+                              {Object.keys(colorMap).map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="flex items-end">
+                            <div className={`w-full border-2 px-4 py-2 text-center text-sm font-semibold ${accent.soft}`}>
+                              Editable fields
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+              No halls added yet.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
