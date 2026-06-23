@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Sparkles,
   Users2,
+  Home,
 } from "lucide-react";
 
 const AUTO_SLIDE_MS = 120000;
@@ -99,13 +100,11 @@ const cx = (...classes) => classes.filter(Boolean).join(" ");
 
 function TypewriterText({ text, speed = 18, delay = 0, className = "", as: Tag = "div" }) {
   const [displayed, setDisplayed] = useState("");
-
   useEffect(() => {
     let timeoutId;
     let tickId;
     let index = 0;
     setDisplayed("");
-
     timeoutId = window.setTimeout(() => {
       const tick = () => {
         index += 1;
@@ -114,13 +113,11 @@ function TypewriterText({ text, speed = 18, delay = 0, className = "", as: Tag =
       };
       tick();
     }, delay);
-
     return () => {
       clearTimeout(timeoutId);
       clearTimeout(tickId);
     };
   }, [text, speed, delay]);
-
   return <Tag className={className}>{displayed}</Tag>;
 }
 
@@ -140,12 +137,7 @@ function StatCard({ label, value, icon: Icon }) {
 
 function MiniBadge({ children, active = false }) {
   return (
-    <span
-      className={cx(
-        "inline-flex items-center gap-1 border px-2.5 py-1 text-xs font-semibold",
-        active ? "border-[#2b275d] bg-[#2b275d] text-white" : "border-slate-200 bg-white text-slate-700"
-      )}
-    >
+    <span className={cx("inline-flex items-center gap-1 border px-2.5 py-1 text-xs font-semibold", active ? "border-[#2b275d] bg-[#2b275d] text-white" : "border-slate-200 bg-white text-slate-700")}>
       {children}
     </span>
   );
@@ -157,18 +149,14 @@ function RolePreview({ role }) {
     <div className="border-2 border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-            After login preview
-          </div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">After login preview</div>
           <div className="mt-1 text-xl font-black text-slate-900">{info.afterTitle}</div>
         </div>
         <div className="border border-slate-300 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">
           {info.badge}
         </div>
       </div>
-
       <p className="mt-3 text-sm leading-6 text-slate-600">{info.afterDesc}</p>
-
       <div className="mt-4 grid gap-2 md:grid-cols-3">
         {info.modules.map((item) => (
           <div key={item} className="border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700">
@@ -180,43 +168,218 @@ function RolePreview({ role }) {
   );
 }
 
-function LoginAccessPanel({
-  role,
-  setRole,
-  user,
-  setUser,
-  pass,
-  setPass,
-  onLogin,
-  loginError,
-  isLoggedIn,
-  passwordRef,
-}) {
-  const current = roleAccess[role];
+function ConsoleLine({ text, tone = "default" }) {
+  return (
+    <div className={cx("flex items-start gap-2 text-[12px] leading-5 md:text-[13px]", tone === "success" ? "text-emerald-400" : tone === "error" ? "text-red-400" : tone === "muted" ? "text-slate-400" : "text-slate-100")}>
+      <span className="mt-[2px] shrink-0 text-slate-500">&gt;</span>
+      <span>{text}</span>
+    </div>
+  );
+}
 
+function ConsoleWindow({ title, lines }) {
+  const endRef = useRef(null);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [lines]);
+  return (
+    <div className="border border-slate-200 bg-slate-950 shadow-sm">
+      <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.26em] text-slate-300">
+        <span>{title}</span>
+        <span className="text-emerald-400">LIVE</span>
+      </div>
+      <div className="h-[240px] overflow-auto p-3 font-mono text-[12px] leading-5 text-slate-100 md:h-[300px]">
+        {lines.map((line) => <ConsoleLine key={line.id} text={line.text} tone={line.tone} />)}
+        <div ref={endRef} />
+      </div>
+    </div>
+  );
+}
+
+function UserDashboard() {
+  return (
+    <div className="grid h-full gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatCard label="Role" value="User" icon={Users2} />
+          <StatCard label="Access" value="Self" icon={ShieldCheck} />
+          <StatCard label="Panel" value="Scan" icon={ScanLine} />
+        </div>
+        <div className="border-2 border-slate-200 bg-white p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">User scanner panel</div>
+          <h3 className="mt-1 text-2xl font-black text-slate-900">Self Attendance Screen</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            User login ke baad employee apna code enter karega, verify button dekhega, aur apni last attendance status check karega.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <input defaultValue="491676" className="border border-slate-300 px-4 py-3 text-sm outline-none" />
+            <button className="bg-[#2b275d] px-4 py-3 text-sm font-bold text-white">Verify Attendance</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-2 border-slate-200 bg-white p-4">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">User ko kya dikhega</div>
+        <div className="mt-3 space-y-3">
+          {["Self Scanner", "My Attendance Status", "Basic Access Only"].map((x) => (
+            <div key={x} className="border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700">
+              {x}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HREntriesDashboard() {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <StatCard label="Rows" value="19" icon={FileCheck2} />
+        <StatCard label="Halls" value="4" icon={Building2} />
+        <StatCard label="Moves" value="16" icon={Activity} />
+        <StatCard label="Role" value="HR" icon={ShieldCheck} />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <div className="border-2 border-slate-200 bg-white p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Scanner visible after HR login</div>
+          <div className="mt-2 text-lg font-black text-slate-900">HR Scanner</div>
+          <div className="mt-3 grid gap-2">
+            <input defaultValue="491676" className="border border-slate-300 px-4 py-3 text-sm outline-none" />
+            <button className="bg-[#2b275d] px-4 py-3 text-sm font-bold text-white">Verify & Save</button>
+          </div>
+        </div>
+
+        <div className="border-2 border-slate-200 bg-white p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Entries visible after HR login</div>
+          <div className="mt-2 space-y-2">
+            {entryRows.slice(0, 3).map((r) => (
+              <div key={r[2]} className="border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                {r[3]} · {r[5]} · {r[6]}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-2 border-slate-200 bg-white p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Hall move visible after HR login</div>
+          <div className="mt-3 grid gap-2">
+            <input placeholder="Employee code" className="border border-slate-300 px-4 py-3 text-sm outline-none" />
+            <select className="border border-slate-300 px-4 py-3 text-sm outline-none">
+              <option>Hall 1</option>
+              <option>Hall 2</option>
+              <option>Hall 3</option>
+              <option>Hall 4</option>
+            </select>
+            <button className="bg-[#E0222A] px-4 py-3 text-sm font-bold text-white">Move Hall</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HRRosterDashboard() {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <StatCard label="Employees" value="389" icon={Users2} />
+        <StatCard label="Mapped" value="4 Hall" icon={Building2} />
+        <StatCard label="Mode" value="Roster" icon={Database} />
+        <StatCard label="Access" value="HR" icon={ShieldCheck} />
+      </div>
+
+      <div className="border-2 border-slate-200 bg-white p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Roster visible after HR login</div>
+          <div className="flex gap-2">
+            <button className="border border-slate-300 px-3 py-2 text-xs">CSV</button>
+            <button className="border border-slate-300 px-3 py-2 text-xs">Excel</button>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-hidden">
+          <table className="min-w-full text-left text-xs">
+            <thead>
+              <tr className="border-b bg-slate-50 text-slate-500">
+                {["Name", "Code", "Designation", "Hall", "Shift", "Week Off"].map((h) => (
+                  <th key={h} className="px-3 py-3">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rosterRows.map((r) => (
+                <tr key={r[1]} className="border-b">
+                  {r.map((cell, i) => (
+                    <td key={i} className={cx("px-3 py-3", i === 0 && "font-semibold")}>
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminDashboard() {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <StatCard label="Role" value="Admin" icon={ShieldCheck} />
+        <StatCard label="Modules" value="6" icon={LayoutDashboard} />
+        <StatCard label="Users" value="389" icon={Users2} />
+        <StatCard label="Halls" value="4" icon={Building2} />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="border-2 border-slate-200 bg-white p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Admin ko kya dikhega</div>
+          <div className="mt-2 text-lg font-black text-slate-900">All role summaries and modules</div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {["Scanner", "Entries", "Roster", "Hall Manager", "Role Visibility", "System Summary"].map((x) => (
+              <div key={x} className="border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700">
+                {x}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-2 border-slate-200 bg-white p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Hall summary visible after Admin login</div>
+          <div className="mt-3 space-y-2">
+            {hallCards.map((h) => (
+              <div key={h.name} className="flex items-center justify-between border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                <span className="font-semibold">{h.name}</span>
+                <span>{h.used}/{h.total}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoginAccessPanel({ role, setRole, user, setUser, pass, setPass, onLogin, loginError, isLoggedIn, passwordRef, consoleLines }) {
+  const current = roleAccess[role];
   return (
     <div className="grid h-full gap-4 xl:grid-cols-[1fr_0.92fr]">
-      <div className="flex items-center">
-        <div className="w-full">
+      <div className="flex items-start">
+        <div className="w-full space-y-4">
           <div className="inline-flex items-center border border-slate-300 bg-white px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-600 shadow-sm">
             Dixon Role Access
           </div>
-
-          <div className="mt-4">
-            <TypewriterText
-              text="Role Based Login Flow"
-              speed={26}
-              className="text-[38px] font-black leading-[1] tracking-tight text-[#241d72] xl:text-[52px]"
-            />
-            <TypewriterText
-              text="Role select karne ke baad pehle ID auto-fill hoti hai. Enter dabane par cursor password field me shift hota hai."
-              speed={12}
-              delay={160}
-              className="mt-3 max-w-3xl text-[15px] leading-6 text-slate-600"
-            />
+          <div>
+            <TypewriterText text="Role Based Login Flow" speed={26} className="text-[38px] font-black leading-[1] tracking-tight text-[#241d72] xl:text-[52px]" />
+            <TypewriterText text="Role select karne ke baad pehle ID auto-fill hoti hai. Enter dabane par cursor password field me shift hota hai." speed={12} delay={160} className="mt-3 max-w-3xl text-[15px] leading-6 text-slate-600" />
           </div>
-
-          <div className="mt-4 grid gap-2 md:grid-cols-3">
+          <div className="grid gap-2 md:grid-cols-3">
             {["USER", "HR", "ADMIN"].map((item) => (
               <button
                 key={item}
@@ -226,36 +389,18 @@ function LoginAccessPanel({
                   setPass("");
                   setTimeout(() => passwordRef.current?.focus(), 0);
                 }}
-                className={cx(
-                  "border-2 px-4 py-3 text-left transition",
-                  role === item ? roleAccess[item].color : "border-slate-300 bg-white text-slate-800"
-                )}
+                className={cx("border-2 px-4 py-3 text-left transition", role === item ? roleAccess[item].color : "border-slate-300 bg-white text-slate-800")}
               >
                 <div className="text-[18px] font-black">{item === "USER" ? "User" : item}</div>
-                <div
-                  className={cx(
-                    "mt-1 text-[12px] leading-5",
-                    role === item && item === "HR"
-                      ? "text-white/80"
-                      : role === item && item === "ADMIN"
-                      ? "text-[#E0222A]/80"
-                      : "text-slate-500"
-                  )}
-                >
+                <div className={cx("mt-1 text-[12px] leading-5", role === item && item === "HR" ? "text-white/80" : role === item && item === "ADMIN" ? "text-[#E0222A]/80" : "text-slate-500")}>
                   {roleAccess[item].subtitle}
                 </div>
               </button>
             ))}
           </div>
-
-          <div className="mt-4 border-2 border-slate-200 bg-white p-4 shadow-sm">
+          <div className="border-2 border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Selected role credentials</div>
-            <TypewriterText
-              key={current.title}
-              text={current.title}
-              speed={18}
-              className="mt-2 text-[22px] font-black text-slate-900"
-            />
+            <TypewriterText key={current.title} text={current.title} speed={18} className="mt-2 text-[22px] font-black text-slate-900" />
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <div className="border border-slate-200 bg-slate-50 px-3 py-3">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Login ID</div>
@@ -267,38 +412,23 @@ function LoginAccessPanel({
               </div>
             </div>
           </div>
-
-          <div className="mt-4">
-            <RolePreview role={role} />
-          </div>
-
+          <RolePreview role={role} />
           {isLoggedIn && (
-            <div className="mt-4 border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+            <div className="border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
               Login successful. Ab role ke hisaab se aage ka dashboard visible hai.
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex items-center justify-center">
-        <div className="w-full max-w-[430px] border-2 border-red-300 bg-white p-5 shadow-sm">
+      <div className="space-y-4">
+        <div className="w-full border-2 border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.26em] text-[#2b275d]">
             <ShieldCheck className="h-3.5 w-3.5" />
             Secure Access
           </div>
-
-          <TypewriterText
-            text="Login"
-            speed={22}
-            className="text-[32px] font-black leading-none text-slate-900"
-          />
-          <TypewriterText
-            text="Selected role ki ID daaliye, Enter dabaiye, phir password bhariye."
-            speed={12}
-            delay={100}
-            className="mt-2 text-[14px] leading-6 text-slate-500"
-          />
-
+          <TypewriterText text="Login" speed={22} className="text-[32px] font-black leading-none text-slate-900" />
+          <TypewriterText text="Selected role ki ID daaliye, Enter dabaiye, phir password bhariye." speed={12} delay={100} className="mt-2 text-[14px] leading-6 text-slate-500" />
           <div className="mt-5 space-y-4">
             <div>
               <label className="mb-2 block text-[14px] font-semibold text-slate-800">Role ID</label>
@@ -333,10 +463,7 @@ function LoginAccessPanel({
               </div>
             </div>
 
-            <button
-              onClick={onLogin}
-              className="w-full bg-[#2b275d] px-4 py-3 text-[15px] font-bold text-white"
-            >
+            <button onClick={onLogin} className="w-full bg-[#2b275d] px-4 py-3 text-[15px] font-bold text-white">
               Login as {role}
             </button>
           </div>
@@ -352,197 +479,8 @@ function LoginAccessPanel({
             </div>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
 
-function UserDashboard() {
-  return (
-    <div className="grid h-full gap-4 xl:grid-cols-[1.08fr_0.92fr]">
-      <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <StatCard label="Role" value="User" icon={Users2} />
-          <StatCard label="Access" value="Self" icon={ShieldCheck} />
-          <StatCard label="Panel" value="Scan" icon={ScanLine} />
-        </div>
-
-        <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-            User scanner panel
-          </div>
-          <h3 className="mt-1 text-2xl font-black text-slate-900">Self Attendance Screen</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            User login ke baad employee apna code enter karega, verify button dekhega, aur apni last attendance status check karega.
-          </p>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <input defaultValue="491676" className="border border-slate-300 px-4 py-3 text-sm outline-none" />
-            <button className="bg-[#2b275d] px-4 py-3 text-sm font-bold text-white">Verify Attendance</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="border-2 border-slate-200 bg-white p-4">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">User ko kya dikhega</div>
-        <div className="mt-3 space-y-3">
-          {["Self Scanner", "My Attendance Status", "Basic Access Only"].map((x) => (
-            <div key={x} className="border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700">
-              {x}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HREntriesDashboard() {
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-4">
-        <StatCard label="Rows" value="19" icon={FileCheck2} />
-        <StatCard label="Halls" value="4" icon={Building2} />
-        <StatCard label="Moves" value="16" icon={Activity} />
-        <StatCard label="Role" value="HR" icon={ShieldCheck} />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-            Scanner visible after HR login
-          </div>
-          <div className="mt-2 text-lg font-black text-slate-900">HR Scanner</div>
-          <div className="mt-3 grid gap-2">
-            <input defaultValue="491676" className="border border-slate-300 px-4 py-3 text-sm outline-none" />
-            <button className="bg-[#2b275d] px-4 py-3 text-sm font-bold text-white">Verify & Save</button>
-          </div>
-        </div>
-
-        <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-            Entries visible after HR login
-          </div>
-          <div className="mt-2 space-y-2">
-            {entryRows.slice(0, 3).map((r) => (
-              <div key={r[2]} className="border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                {r[3]} · {r[5]} · {r[6]}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-            Hall move visible after HR login
-          </div>
-          <div className="mt-3 grid gap-2">
-            <input placeholder="Employee code" className="border border-slate-300 px-4 py-3 text-sm outline-none" />
-            <select className="border border-slate-300 px-4 py-3 text-sm outline-none">
-              <option>Hall 1</option>
-              <option>Hall 2</option>
-              <option>Hall 3</option>
-              <option>Hall 4</option>
-            </select>
-            <button className="bg-[#E0222A] px-4 py-3 text-sm font-bold text-white">Move Hall</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HRRosterDashboard() {
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-4">
-        <StatCard label="Employees" value="389" icon={Users2} />
-        <StatCard label="Mapped" value="4 Hall" icon={Building2} />
-        <StatCard label="Mode" value="Roster" icon={Database} />
-        <StatCard label="Access" value="HR" icon={ShieldCheck} />
-      </div>
-
-      <div className="border-2 border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-            Roster visible after HR login
-          </div>
-          <div className="flex gap-2">
-            <button className="border border-slate-300 px-3 py-2 text-xs">CSV</button>
-            <button className="border border-slate-300 px-3 py-2 text-xs">Excel</button>
-          </div>
-        </div>
-
-        <div className="mt-4 overflow-hidden">
-          <table className="min-w-full text-left text-xs">
-            <thead>
-              <tr className="border-b bg-slate-50 text-slate-500">
-                {["Name", "Code", "Designation", "Hall", "Shift", "Week Off"].map((h) => (
-                  <th key={h} className="px-3 py-3">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rosterRows.map((r) => (
-                <tr key={r[1]} className="border-b">
-                  {r.map((cell, i) => (
-                    <td key={i} className={cx("px-3 py-3", i === 0 && "font-semibold")}>
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdminDashboard() {
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-4">
-        <StatCard label="Role" value="Admin" icon={ShieldCheck} />
-        <StatCard label="Modules" value="6" icon={LayoutDashboard} />
-        <StatCard label="Users" value="389" icon={Users2} />
-        <StatCard label="Halls" value="4" icon={Building2} />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-            Admin ko kya dikhega
-          </div>
-          <div className="mt-2 text-lg font-black text-slate-900">All role summaries and modules</div>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {["Scanner", "Entries", "Roster", "Hall Manager", "Role Visibility", "System Summary"].map((x) => (
-              <div key={x} className="border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700">
-                {x}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="border-2 border-slate-200 bg-white p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-            Hall summary visible after Admin login
-          </div>
-          <div className="mt-3 space-y-2">
-            {hallCards.map((h) => (
-              <div
-                key={h.name}
-                className="flex items-center justify-between border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"
-              >
-                <span className="font-semibold">{h.name}</span>
-                <span>{h.used}/{h.total}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ConsoleWindow title="Role Console" lines={consoleLines} />
       </div>
     </div>
   );
@@ -560,6 +498,7 @@ export default function HRTrainingRoute() {
   const [pass, setPass] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState(false);
+  const [consoleLines, setConsoleLines] = useState([]);
 
   const passwordRef = useRef(null);
   const autoplayRef = useRef(null);
@@ -573,16 +512,12 @@ export default function HRTrainingRoute() {
       clearInterval(autoplayRef.current);
       return;
     }
-    autoplayRef.current = setInterval(() => {
-      setStep((s) => (s + 1) % steps.length);
-    }, AUTO_SLIDE_MS);
+    autoplayRef.current = setInterval(() => setStep((s) => (s + 1) % steps.length), AUTO_SLIDE_MS);
     return () => clearInterval(autoplayRef.current);
   }, [playing]);
 
   useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setTimer((t) => t + 1);
-    }, 1000);
+    timerRef.current = setInterval(() => setTimer((t) => t + 1), 1000);
     return () => clearInterval(timerRef.current);
   }, []);
 
@@ -605,54 +540,80 @@ export default function HRTrainingRoute() {
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
+  useEffect(() => {
+    setUser(roleAccess[role].id);
+    setPass("");
+    setLoginError(false);
+    setIsLoggedIn(false);
+  }, [role]);
+
+  useEffect(() => {
+    setConsoleLines([
+      { id: "boot-1", text: "System booting role access console...", tone: "muted" },
+      { id: "boot-2", text: `Role selected: ${roleAccess[role].title}`, tone: "default" },
+      { id: "boot-3", text: `Login ID loaded: ${roleAccess[role].id}`, tone: "default" },
+      { id: "boot-4", text: "Password field ready for input.", tone: "muted" },
+      { id: "boot-5", text: `Preview modules: ${roleAccess[role].modules.join(", ")}`, tone: "muted" },
+    ]);
+    setTimeout(() => passwordRef.current?.focus(), 0);
+  }, [role]);
+
   const goPrev = () => setStep((s) => (s - 1 + steps.length) % steps.length);
   const goNext = () => setStep((s) => (s + 1) % steps.length);
 
-  const restart = () => {
+  const resetToHome = () => {
+    setShowSidebar(true);
     setStep(0);
-    setTimer(0);
     setPlaying(false);
-    setIsLoggedIn(false);
-    setLoginError(false);
+    setFullscreen(false);
+    setTimer(0);
     setRole("HR");
     setUser(roleAccess.HR.id);
     setPass("");
-    passwordRef.current?.focus();
+    setIsLoggedIn(false);
+    setLoginError(false);
   };
 
-  const logoutAll = () => {
+  const handleLogout = () => {
     setIsLoggedIn(false);
     setLoginError(false);
     setStep(0);
     setPass("");
     setUser(roleAccess[role].id);
+    setConsoleLines((prev) => [...prev, { id: `logout-${Date.now()}`, text: "Session ended. Returned to login state.", tone: "muted" }]);
+  };
+
+  const goHome = () => {
+    window.location.href = "/";
   };
 
   const toggleFullscreen = async () => {
-    if (!document.fullscreenElement) {
-      await document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      await document.exitFullscreen().catch(() => {});
-    }
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen().catch(() => {});
+    else await document.exitFullscreen().catch(() => {});
   };
+
+  const appendConsole = (line) => setConsoleLines((prev) => [...prev, { id: `${Date.now()}-${Math.random()}`, ...line }]);
 
   const handleLogin = () => {
     const correct = roleAccess[role];
+    appendConsole({ text: `Checking credentials for ${role}...`, tone: "muted" });
     if (user === correct.id && pass === correct.password) {
       setIsLoggedIn(true);
       setLoginError(false);
+      appendConsole({ text: "Authentication successful.", tone: "success" });
+      appendConsole({ text: `Loading ${role} dashboard...`, tone: "default" });
       if (role === "USER") setStep(1);
       if (role === "HR") setStep(2);
       if (role === "ADMIN") setStep(4);
     } else {
       setIsLoggedIn(false);
       setLoginError(true);
+      appendConsole({ text: "Authentication failed. Invalid ID or password.", tone: "error" });
     }
   };
 
   const fmtTime = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
   const activeTab = current.tab;
-
   const shellTitle = {
     login: {
       title: "Role Based Login Access",
@@ -741,6 +702,13 @@ export default function HRTrainingRoute() {
                   {showSidebar ? "Hide Map" : "Show Map"}
                 </button>
                 <button
+                  onClick={goHome}
+                  className="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                >
+                  <Home className="mr-1 inline h-4 w-4" />
+                  Home
+                </button>
+                <button
                   onClick={toggleFullscreen}
                   className="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
                 >
@@ -762,14 +730,12 @@ export default function HRTrainingRoute() {
                     <Sparkles className="h-3 w-3" />
                     Guided Role Demo
                   </div>
-
                   <TypewriterText
                     key={shellTitle.title}
                     text={shellTitle.title}
                     speed={16}
                     className="mt-3 text-3xl font-black leading-tight md:text-5xl"
                   />
-
                   <TypewriterText
                     key={shellTitle.desc}
                     text={shellTitle.desc}
@@ -840,6 +806,7 @@ export default function HRTrainingRoute() {
                       loginError={loginError}
                       isLoggedIn={isLoggedIn}
                       passwordRef={passwordRef}
+                      consoleLines={consoleLines}
                     />
                   )}
                   {activeTab === "user" && <UserDashboard />}
@@ -868,11 +835,11 @@ export default function HRTrainingRoute() {
                       {playing ? <Pause className="mr-1 inline h-4 w-4" /> : <Play className="mr-1 inline h-4 w-4" />}
                       {playing ? "Pause" : "Play"}
                     </button>
-                    <button onClick={restart} className="border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+                    <button onClick={resetToHome} className="border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
                       <RotateCcw className="mr-1 inline h-4 w-4" />
                       Reset
                     </button>
-                    <button onClick={logoutAll} className="border border-[#E0222A] bg-[#E0222A] px-4 py-2 text-sm font-semibold text-white shadow-sm">
+                    <button onClick={handleLogout} className="border border-[#E0222A] bg-[#E0222A] px-4 py-2 text-sm font-semibold text-white shadow-sm">
                       <LogOut className="mr-1 inline h-4 w-4" />
                       Logout
                     </button>
