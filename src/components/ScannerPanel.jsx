@@ -1,609 +1,727 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import QrScanner from "qr-scanner";
 import {
-  Download,
-  Search,
-  Trash2,
+  CalendarDays,
+  ScanBarcode,
+  Keyboard,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
   ShieldAlert,
-  Filter,
-  Copy,
-  Eye,
   Loader2,
-  RefreshCw,
-  FileSpreadsheet,
+  ScanLine,
+  Copy,
+  Search,
+  Camera,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useHR } from "../context/HRContext";
-import hrApi from "../api/hrApi";
-import * as XLSX from "xlsx";
 
-const normalizeEntry = (entry) => ({
-  ...entry,
-  id: entry.id,
-  hallId: entry.hall_id || entry.hallId || "",
-  hallName: entry.hall_name || entry.hallName || `Hall ${entry.hall_id || entry.hallId || "?"}`,
-  overrideReason: entry.override_reason || entry.overrideReason || "",
-  hrCode: entry.hr_code || entry.hrCode || "",
-  hrAction: entry.hr_action || entry.hrAction || "",
-  source: entry.source || "",
-  date: entry.date || "",
-  time: entry.time || "",
-  day: entry.day || "",
-});
+function Toast({ toast, onClose }) {
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(onClose, 2200);
+    return () => clearTimeout(t);
+  }, [toast, onClose]);
 
-const toTime = (dateStr, endOfDay = false) => {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return null;
-  if (endOfDay) d.setHours(23, 59, 59, 999);
-  else d.setHours(0, 0, 0, 0);
-  return d.getTime();
-};
+  if (!toast) return null;
 
-export default function EntryTable() {
-  const { state, setState, moveEmployeeToHall, refreshAfterWrite } = useHR();
+  const cls =
+    toast.type === "success"
+      ? "bg-emerald-600 text-white"
+      : toast.type === "error"
+      ? "bg-rose-600 text-white"
+      : "bg-amber-500 text-white";
 
-  const [query, setQuery] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
-  const [hallFilter, setHallFilter] = useState("");
-  const [shiftFilter, setShiftFilter] = useState("");
-  const [reasonFilter, setReasonFilter] = useState("");
+  const Icon =
+    toast.type === "success"
+      ? CheckCircle2
+      : toast.type === "error"
+      ? XCircle
+      : AlertTriangle;
 
-  const [moveCode, setMoveCode] = useState("");
-  const [moveHallId, setMoveHallId] = useState("H1");
-  const [moveReason, setMoveReason] = useState("");
+  return (
+    <div className={`fixed left-1/2 top-2 z-[100] -translate-x-1/2 rounded border px-3 py-2 shadow-lg ${cls}`}>
+      <div className="flex items-center gap-2 text-xs font-semibold sm:text-sm">
+        <Icon className="h-4 w-4" />
+        {toast.message}
+      </div>
+    </div>
+  );
+}
 
-  const [selectedRow, setSelectedRow] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const fetchEntries = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await hrApi.getEntries();
-      if (res.success) {
-        const rawEntries = Array.isArray(res.data) ? res.data : [];
-        const mappedEntries = rawEntries.map(normalizeEntry);
-        setState((prev) => ({
-          ...prev,
-          entries: mappedEntries,
-        }));
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [setState]);
+function MobileScanner({ onResult, onClose }) {
+  const videoRef = useRef(null);
+  const scannerRef = useRef(null);
 
   useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries, refreshKey]);
+    let mounted = true;
 
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const base = Array.isArray(state.entries) ? state.entries.map(normalizeEntry) : [];
-    const fromTime = toTime(dateFrom, false);
-    const toTimeValue = toTime(dateTo, true);
+    const startScanner = async () => {
+      try {
+        if (!videoRef.current) return;
 
-    return base.filter((r) => {
-      const vals = [
-        r.code,
-        r.name,
-        r.designation,
-        r.hallName,
-        r.shift,
-        r.source,
-        r.day,
-        r.status,
-        r.overrideReason,
-        r.hrCode,
-        r.hrAction,
-      ]
-        .join(" ")
-        .toLowerCase();
+        scannerRef.current = new QrScanner(
+          videoRef.current,
+          async (result) => {
+            const text = result?.data || result;
+            if (!text) return;
+            await onResult(text);
+            if (scannerRef.current) scannerRef.current.stop();
+            onClose();
+          },
+          {
+            preferredCamera: "environment",
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+          }
+        );
 
-      const qOk = !q || vals.includes(q);
-      const sourceOk = !sourceFilter || String(r.source || "") === sourceFilter;
-      const hallOk = !hallFilter || String(r.hallId || "") === hallFilter;
-      const shiftOk = !shiftFilter || String(r.shift || "") === shiftFilter;
+        if (mounted) await scannerRef.current.start();
+      } catch (err) {
+        console.error("QR Scanner Error:", err);
+      }
+    };
 
-      const reasonText = String(r.overrideReason || "").toLowerCase();
-      const reasonOk = !reasonFilter || reasonText.includes(reasonFilter.trim().toLowerCase());
+    startScanner();
 
-      const rowTime = toTime(r.date, false);
-      const dateOk =
-        (!fromTime || (rowTime !== null && rowTime >= fromTime)) &&
-        (!toTimeValue || (rowTime !== null && rowTime <= toTimeValue));
+    return () => {
+      mounted = false;
+      if (scannerRef.current) {
+        scannerRef.current.stop();
+        scannerRef.current.destroy();
+        scannerRef.current = null;
+      }
+    };
+  }, [onResult, onClose]);
 
-      return qOk && sourceOk && hallOk && shiftOk && reasonOk && dateOk;
-    });
-  }, [state.entries, hallFilter, query, reasonFilter, shiftFilter, sourceFilter, dateFrom, dateTo]);
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-2">
+      <div className="flex h-[92vh] w-full max-w-sm flex-col overflow-hidden border border-[#23205C] bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b px-3 py-2">
+          <h3 className="text-sm font-semibold text-slate-900">QR Scanner</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded bg-[#E0222A] px-3 py-1.5 text-xs font-semibold text-white"
+          >
+            Close
+          </button>
+        </div>
+        <div className="flex-1 p-2">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="h-full w-full rounded border border-slate-300 object-cover"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const exportCsv = () => {
-    const headers = [
-      "date",
-      "day",
-      "time",
-      "code",
-      "name",
-      "designation",
-      "shift",
-      "weekOff",
-      "hallId",
-      "hallName",
-      "source",
-      "hrCode",
-      "hrAction",
-      "overrideReason",
-    ];
+function StatusCard({ label, value, valueClass = "text-slate-900" }) {
+  return (
+    <div className="border-2 border-slate-300 bg-white p-5">
+      <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</div>
+      <div className={`mt-2 text-xl font-bold ${valueClass}`}>{value}</div>
+    </div>
+  );
+}
 
-    const csv = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? ""))]
-      .map((line) => line.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(","))
-      .join("\n");
+export default function ScannerPanel() {
+  const {
+    state,
+    processEntry,
+    hrOverrideEntry,
+    moveEmployeeToHall,
+    hallUsage,
+    totals,
+    activeEntries,
+  } = useHR();
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "attendance-sheet.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const [code, setCode] = useState("");
+  const [selectedHall, setSelectedHall] = useState("H1");
+  const [reason, setReason] = useState("");
+  const [toast, setToast] = useState(null);
+  const [mode, setMode] = useState("scan");
+  const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [mobileScannerOpen, setMobileScannerOpen] = useState(false);
+  const [showHrControls, setShowHrControls] = useState(true);
 
-  const exportExcel = () => {
-    const data = rows.map((r) => ({
-      Date: String(r.date).slice(0, 10),
-      Day: r.day || "",
-      Time: r.time || "",
-      Code: r.code || "",
-      Name: r.name || "",
-      Designation: r.designation || "",
-      Shift: r.shift || "",
-      WeekOff: r.weekOff || "",
-      HallId: r.hallId || "",
-      HallName: r.hallName || "",
-      Source: r.source || "",
-      HrCode: r.hrCode || "",
-      HrAction: r.hrAction || "",
-      OverrideReason: r.overrideReason || "",
+  const canScan = !totals.locked;
+  const codeInputRef = useRef(null);
+  const successBeepRef = useRef(null);
+  const errorBeepRef = useRef(null);
+
+  const isHR = state.currentRole === "HR" || state.currentRole === "ADMIN";
+
+  const empResult = useMemo(
+    () => state.employees.find((e) => String(e.code).trim() === String(code).trim()),
+    [code, state.employees]
+  );
+
+  const recentRows = useMemo(() => {
+    const mapped = (Array.isArray(activeEntries) ? activeEntries : []).map((entry) => ({
+      ...entry,
+      hallName: entry.hall_name || entry.hallName || `Hall ${entry.hall_id || entry.hallId || "?"}`,
+      overrideReason: entry.override_reason || entry.overrideReason || "",
     }));
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Attendance");
-    XLSX.writeFile(wb, "attendance-sheet.xlsx");
-  };
+    const q = query.trim().toLowerCase();
+    return mapped.filter((e) => {
+      if (!q) return true;
+      return `${e.name || ""} ${e.code || ""} ${e.designation || ""} ${e.hallName || ""} ${e.source || ""} ${e.overrideReason || ""}`
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [activeEntries, query]);
 
-  const copyRow = async (r) => {
-    const text = `${r.code} | ${r.name} | ${r.designation} | ${r.hallName} | ${r.source}`;
+  const playSuccess = () => {
     try {
-      await navigator.clipboard.writeText(text);
+      if (successBeepRef.current) {
+        successBeepRef.current.currentTime = 0;
+        successBeepRef.current.play();
+      }
     } catch {}
   };
 
-  const removeEntry = async (id) => {
-    const ok = window.confirm("Delete this attendance entry?");
-    if (!ok) return;
-
-    setLoading(true);
+  const playError = () => {
     try {
-      const res = await hrApi.deleteEntry(id);
-      if (res.success) {
-        setState((prev) => ({
-          ...prev,
-          entries: prev.entries.filter((x) => String(x.id) !== String(id)),
-        }));
-        if (String(selectedRow) === String(id)) setSelectedRow(null);
-      } else {
-        alert(res.error || "Delete failed");
+      if (errorBeepRef.current) {
+        errorBeepRef.current.currentTime = 0;
+        errorBeepRef.current.play();
       }
+    } catch {}
+  };
+
+  const pushToast = (type, message) => {
+    setToast({ type, message });
+    if (type === "success") playSuccess();
+    else playError();
+  };
+
+  const focusCode = () => {
+    requestAnimationFrame(() => {
+      codeInputRef.current?.focus();
+    });
+  };
+
+  const handleSuccessProcess = (ok) => {
+    if (ok) setCode("");
+    focusCode();
+  };
+
+  useEffect(() => {
+    focusCode();
+  }, []);
+
+  const onProcess = async (value) => {
+    const finalCode = String(value ?? code).trim();
+    if (!finalCode) return pushToast("error", "Please enter code.");
+    if (!canScan) return pushToast("error", "Capacity locked.");
+
+    setBusy(true);
+    try {
+      const res = await processEntry(finalCode);
+      pushToast(res.ok ? "success" : res.type || "error", res.text || "Done");
+
+      if (!res.ok && res.weekOff && isHR) {
+        const ok = window.confirm("Week off hai. HR override karna hai?");
+        if (ok) {
+          const ov = await hrOverrideEntry({
+            code: finalCode,
+            hallId: selectedHall,
+            reason: reason.trim() || "Week off override by HR",
+          });
+          pushToast(ov.ok ? "success" : "error", ov.text || "Override done");
+          handleSuccessProcess(ov.ok);
+          return;
+        }
+      }
+
+      handleSuccessProcess(res.ok);
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
+  };
+
+  const handleScannedCode = async (val) => {
+    const value = String(val || "").trim();
+    if (!value) return;
+    setCode(value);
+    await onProcess(value);
   };
 
   const onMove = async () => {
-    if (!moveCode.trim() || !moveReason.trim()) {
-      alert("Code aur reason required hai.");
-      return;
+    const finalCode = code.trim();
+    const finalReason = reason.trim();
+
+    if (!finalCode || !selectedHall || !finalReason) {
+      return pushToast("error", "Code, hall, reason sab required hain.");
     }
 
-    setLoading(true);
+    setBusy(true);
     try {
       const res = await moveEmployeeToHall({
-        code: moveCode.trim(),
-        hallId: moveHallId,
-        reason: moveReason.trim(),
+        code: finalCode,
+        hallId: selectedHall,
+        reason: finalReason,
       });
-
-      alert(res.text || (res.ok ? "Moved successfully" : "Failed"));
-
-      if (res.ok) {
-        setMoveCode("");
-        setMoveReason("");
-        setRefreshKey((k) => k + 1);
-        await refreshAfterWrite();
-      }
+      pushToast(res.ok ? "success" : "error", res.text || "Done");
+      handleSuccessProcess(res.ok);
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
-  const clearFilters = () => {
-    setQuery("");
-    setDateFrom("");
-    setDateTo("");
-    setSourceFilter("");
-    setHallFilter("");
-    setShiftFilter("");
-    setReasonFilter("");
+  const onQuickCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code.trim());
+      pushToast("success", "Code copied.");
+    } catch {
+      pushToast("error", "Copy failed.");
+    }
   };
 
-  const refresh = () => setRefreshKey((k) => k + 1);
+  const handleInputKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onProcess();
+    }
+  };
 
   return (
-    <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
-      <div className="border-b border-slate-300 bg-[#23205C] px-4 py-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-white">Attendance Sheet</h2>
-            <p className="mt-1 text-sm text-white/70">
-              Search, filter, export, and HR hall transfer.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
-              onClick={clearFilters}
-              type="button"
-            >
-              <Filter className="mr-1 inline h-4 w-4" />
-              Clear Filters
-            </button>
-            <button
-              className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
-              onClick={refresh}
-              type="button"
-            >
-              <RefreshCw className="mr-1 inline h-4 w-4" />
-              Refresh
-            </button>
-            <button
-              className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
-              onClick={exportCsv}
-              type="button"
-            >
-              <Download className="mr-1 inline h-4 w-4" />
-              Export CSV
-            </button>
-            <button
-              className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
-              onClick={exportExcel}
-              type="button"
-            >
-              <FileSpreadsheet className="mr-1 inline h-4 w-4" />
-              Export Excel
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-dvh w-full overflow-hidden bg-slate-100">
+      <audio ref={successBeepRef} src="/beep.wav" preload="auto" />
+      <audio ref={errorBeepRef} src="/error.wav" preload="auto" />
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <div className="border-b border-slate-300 bg-slate-50 p-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
-          <div className="relative md:col-span-2">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              className="w-full border-2 border-slate-300 bg-white px-4 py-3 pl-9 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search attendance"
-            />
-          </div>
+      {mobileScannerOpen && (
+        <MobileScanner
+          onResult={handleScannedCode}
+          onClose={() => setMobileScannerOpen(false)}
+        />
+      )}
 
-          <input
-            type="date"
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-          />
-
-          <input
-            type="date"
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-          />
-
-          <select
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value)}
-          >
-            <option value="">All sources</option>
-            <option value="SCAN">SCAN</option>
-            <option value="HR_OVERRIDE">HR_OVERRIDE</option>
-            <option value="HR_TRANSFER">HR_TRANSFER</option>
-          </select>
-
-          <select
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={hallFilter}
-            onChange={(e) => setHallFilter(e.target.value)}
-          >
-            <option value="">All halls</option>
-            {state.halls.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={shiftFilter}
-            onChange={(e) => setShiftFilter(e.target.value)}
-          >
-            <option value="">All shifts</option>
-            <option value="A">A</option>
-            <option value="B">B</option>
-            <option value="C">C</option>
-            <option value="AA">AA</option>
-            <option value="BB">BB</option>
-          </select>
-
-          <input
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
-            value={reasonFilter}
-            onChange={(e) => setReasonFilter(e.target.value)}
-            placeholder="Filter by reason"
-          />
-
-          <input
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={moveCode}
-            onChange={(e) => setMoveCode(e.target.value)}
-            placeholder="Employee code for transfer"
-          />
-
-          <select
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={moveHallId}
-            onChange={(e) => setMoveHallId(e.target.value)}
-          >
-            {state.halls.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.name}
-              </option>
-            ))}
-          </select>
-
-          <input
-            className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none hover:border-slate-400 focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
-            value={moveReason}
-            onChange={(e) => setMoveReason(e.target.value)}
-            placeholder="Reason for hall move"
-          />
-
-          <button
-            className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 md:col-span-2"
-            type="button"
-            onClick={onMove}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="mr-1 inline h-4 w-4 animate-spin" />
-            ) : (
-              <ShieldAlert className="mr-1 inline h-4 w-4" />
-            )}
-            HR Move
-          </button>
-        </div>
-      </div>
-
-      <div className="px-4 pt-4">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="border-2 border-slate-300 bg-white p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Total Rows
-            </div>
-            <div className="mt-2 text-xl font-bold text-slate-900">{rows.length}</div>
-          </div>
-          <div className="border-2 border-slate-300 bg-white p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Halls Used
-            </div>
-            <div className="mt-2 text-xl font-bold text-slate-900">
-              {new Set(rows.map((r) => r.hallId)).size}
-            </div>
-          </div>
-          <div className="border-2 border-slate-300 bg-white p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              HR Entries
-            </div>
-            <div className="mt-2 text-xl font-bold text-slate-900">
-              {rows.filter((r) => r.source !== "SCAN").length}
-            </div>
-          </div>
-          <div className="border-2 border-slate-300 bg-white p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Scan Entries
-            </div>
-            <div className="mt-2 text-xl font-bold text-slate-900">
-              {rows.filter((r) => r.source === "SCAN").length}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 px-4 pb-4">
+      <div className="mx-auto min-h-dvh w-full max-w-8xl overflow-hidden bg-white shadow-xl">
         <div className="hidden md:block">
-          <div className="max-h-[520px] overflow-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Date</th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Day</th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Time</th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Code</th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Name</th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Designation</th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Shift</th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Hall</th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Source</th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Reason</th>
-                  <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length ? (
-                  rows.map((r) => (
-                    <tr
-                      key={`${r.id}-${r.code}-${r.time}-${r.name}-${r.hallId}`}
-                      className={String(selectedRow) === String(r.id) ? "bg-slate-100" : "border-b border-slate-200"}
-                      onClick={() => setSelectedRow(r.id)}
-                    >
-                      <td className="px-3 py-3 text-sm text-slate-700">{String(r.date).slice(0, 10)}</td>
-                      <td className="px-3 py-3 text-sm text-slate-700">{r.day}</td>
-                      <td className="px-3 py-3 text-sm text-slate-700">{r.time}</td>
-                      <td className="px-3 py-3 text-sm font-bold text-slate-900">{r.code}</td>
-                      <td className="px-3 py-3 text-sm text-slate-900">{r.name}</td>
-                      <td className="px-3 py-3 text-sm text-slate-700">{r.designation || "-"}</td>
-                      <td className="px-3 py-3 text-sm text-slate-700">{r.shift}</td>
-                      <td className="px-3 py-3 text-sm">
-                        <span className="border-2 border-slate-300 bg-white px-2 py-1 text-slate-700">
-                          {r.hallName}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-sm">
-                        <span
-                          className={
-                            r.source === "SCAN"
-                              ? "border-2 border-emerald-300 bg-emerald-50 px-2 py-1 text-emerald-700"
-                              : "border-2 border-[#E0222A] bg-[#E0222A]/10 px-2 py-1 text-[#E0222A]"
-                          }
-                        >
-                          {r.source}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-sm text-slate-500">{r.overrideReason || "-"}</td>
-                      <td className="px-3 py-3 text-sm">
-                        <div className="flex gap-2">
-                          <button
-                            className="border-2 border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
-                            type="button"
-                            onClick={() => copyRow(r)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </button>
-                          <button
-                            className="border-2 border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
-                            type="button"
-                            onClick={() => setSelectedRow(r.id)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            className="border-2 border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 font-semibold text-[#E0222A] hover:bg-[#E0222A]/20"
-                            onClick={() => removeEntry(r.id)}
-                            type="button"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="11" className="py-10 text-center text-sm text-slate-500">
-                      No attendance records found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="border-b border-slate-300 bg-[#23205C] px-4 py-4 text-white sm:px-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-bold sm:text-xl">Dixon Dehradun Attendance</h2>
+                <p className="truncate text-xs text-white/70 sm:text-sm">Scanner panel with hall control</p>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="grid gap-3 md:hidden">
-          {rows.length ? (
-            rows.map((r) => (
-              <div
-                key={`${r.id}-${r.code}-${r.time}-${r.name}`}
-                className={`rounded border p-3 ${
-                  String(selectedRow) === String(r.id) ? "border-slate-400 bg-slate-50" : "border-slate-200 bg-white"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs text-slate-500">
-                      {String(r.date).slice(0, 10)} • {r.day} • {r.time}
-                    </div>
-                    <div className="mt-1 text-sm font-bold text-slate-900">{r.name}</div>
-                    <div className="text-xs text-slate-700">
-                      {r.code} • {r.designation || "-"} • {r.shift || "-"}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700">
-                      {r.hallName}
-                    </div>
-                    <div
-                      className={`mt-2 inline-block rounded px-2 py-1 text-[10px] font-semibold ${
-                        r.source === "SCAN"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-[#E0222A]/10 text-[#E0222A]"
-                      }`}
+          {isHR && (
+            <div className="border-b border-slate-300 bg-slate-50 p-4 sm:p-5">
+              {showHrControls && (
+                <div className="mb-5 border-2 border-[#E0222A] bg-[#E0222A]/5 p-4">
+                  <div className="mb-3 text-sm font-bold text-[#E0222A]">HR Controls</div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <input
+                      className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                      placeholder="Reason / override note"
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                    />
+                    <select
+                      className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                      value={selectedHall}
+                      onChange={(e) => setSelectedHall(e.target.value)}
                     >
-                      {r.source}
-                    </div>
+                      {state.halls.map((h) => (
+                        <option key={h.id} value={h.id}>
+                          {h.name} ({h.capacity})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="bg-[#E0222A] px-4 py-3 font-semibold text-white disabled:opacity-50"
+                      type="button"
+                      onClick={onMove}
+                      disabled={busy}
+                    >
+                      <ShieldAlert className="mr-1 inline h-4 w-4" />
+                      Move Hall
+                    </button>
                   </div>
                 </div>
+              )}
 
-                <div className="mt-2 text-xs text-slate-500">
-                  {r.overrideReason || "-"}
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <input
+                  className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                  placeholder="Select employee code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  onKeyDown={handleInputKeyDown}
+                />
+                <button
+                  className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
+                  type="button"
+                  onClick={() => setMode(mode === "scan" ? "manual" : "scan")}
+                >
+                  <Keyboard className="mr-1 inline h-4 w-4" />
+                  {mode === "scan" ? "Manual Mode" : "Scan Mode"}
+                </button>
+                <button
+                  className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
+                  type="button"
+                  onClick={() => setMobileScannerOpen(true)}
+                >
+                  <Camera className="mr-1 inline h-4 w-4" />
+                  Camera Scan
+                </button>
+                <button
+                  className="bg-[#E0222A] px-4 py-3 font-semibold text-white disabled:opacity-50"
+                  type="button"
+                  onClick={() => onProcess()}
+                  disabled={busy || !canScan}
+                >
+                  {busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <ScanLine className="mr-1 inline h-4 w-4" />}
+                  Process Entry
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="p-4 sm:p-5">
+            <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-4">
+              <StatusCard label="Role" value={state.currentRole} />
+              <StatusCard label="Selected Count" value={totals.selectedCount} />
+              <StatusCard label="Capacity" value={totals.totalCapacity} />
+              <StatusCard
+                label="Status"
+                value={totals.locked ? "Locked" : "Open"}
+                valueClass={totals.locked ? "text-[#E0222A]" : "text-emerald-600"}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <div className="border-2 border-slate-300 bg-white p-5">
+                <div className="flex items-center gap-2 font-bold text-slate-900">
+                  <ScanBarcode className="h-4 w-4" />
+                  Scanner / Manual Entry
                 </div>
-
-                <div className="mt-3 flex gap-2">
+                <div className="mt-4 flex gap-3">
+                  <input
+                    ref={codeInputRef}
+                    className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                    placeholder={mode === "manual" ? "Type punch code manually" : "Scan or type code"}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    onKeyDown={handleInputKeyDown}
+                  />
                   <button
-                    className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                    className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
                     type="button"
-                    onClick={() => copyRow(r)}
+                    onClick={onQuickCopy}
                   >
-                    <Copy className="mr-1 inline h-4 w-4" />
-                    Copy
+                    <Copy className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
+                    type="button"
+                    onClick={() => onProcess()}
+                  >
+                    Verify
                   </button>
                   <button
-                    className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                    className="bg-[#E0222A] px-4 py-3 font-semibold text-white disabled:opacity-50"
                     type="button"
-                    onClick={() => setSelectedRow(r.id)}
+                    onClick={() => onProcess()}
+                    disabled={busy || !canScan}
                   >
-                    <Eye className="mr-1 inline h-4 w-4" />
-                    View
+                    {busy ? "Saving..." : "Save Entry"}
                   </button>
-                  <button
-                    className="flex-1 rounded border border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 text-sm font-semibold text-[#E0222A]"
-                    onClick={() => removeEntry(r.id)}
-                    type="button"
-                  >
-                    <Trash2 className="mr-1 inline h-4 w-4" />
-                    Delete
-                  </button>
+                </div>
+                <div className="mt-4 border-2 border-slate-300 bg-slate-50 px-4 py-2 text-sm text-slate-700">
+                  Current hall of employee will be used automatically if space is available.
+                </div>
+                <div className="mt-4 text-sm text-slate-600">
+                  Matched employee:{" "}
+                  <span className="font-bold text-slate-900">
+                    {empResult ? `${empResult.name} (${empResult.code}) - ${empResult.designation || "No designation"}` : "-"}
+                  </span>
                 </div>
               </div>
-            ))
-          ) : (
-            <div className="rounded border border-slate-200 bg-white p-4 text-center text-sm text-slate-500">
-              No attendance records found.
+
+              <div className="border-2 border-slate-300 bg-white p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 font-bold text-slate-900">
+                    <CalendarDays className="h-4 w-4" />
+                    Hall Load
+                  </div>
+                  <button
+                    className="border-2 border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700"
+                    type="button"
+                    onClick={() => setShowHistory((v) => !v)}
+                  >
+                    <Search className="mr-1 inline h-4 w-4" />
+                    {showHistory ? "Hide Logs" : "Show Logs"}
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-4">
+                  {hallUsage.map((h) => (
+                    <div key={h.id} className="border-2 border-slate-300 p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="font-bold text-slate-900">{h.name}</div>
+                        <div className={`text-sm font-bold ${h.full ? "text-[#E0222A]" : "text-slate-700"}`}>
+                          {h.used}/{h.capacity}
+                        </div>
+                      </div>
+                      <div className="mt-3 h-2 border-2 border-slate-300 bg-white">
+                        <div
+                          className={`h-2 ${h.full ? "bg-[#E0222A]" : "bg-slate-700"}`}
+                          style={{ width: `${Math.min(100, Math.round((h.used / Math.max(h.capacity, 1)) * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {showHistory && (showHrControls || state.currentRole === "ADMIN") && (
+              <div className="mt-5 border-2 border-slate-300 bg-white p-5">
+                <div className="mb-4 text-sm font-bold text-slate-900">Recent Entries</div>
+                <div className="mb-4">
+                  <input
+                    className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
+                    placeholder="Search entries (name, code, designation, hall)"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                </div>
+                <div className="max-h-[360px] overflow-auto">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr>
+                        <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700">Time</th>
+                        <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700">Code</th>
+                        <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700">Name</th>
+                        <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700">Designation</th>
+                        <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700">Hall</th>
+                        <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700">Source</th>
+                        <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentRows.length ? (
+                        recentRows.slice(0, 25).map((r) => (
+                          <tr key={r.id} className="border-b border-slate-200">
+                            <td className="px-3 py-2 text-sm text-slate-700">{r.time || "-"}</td>
+                            <td className="px-3 py-2 text-sm font-semibold text-slate-900">{r.code}</td>
+                            <td className="px-3 py-2 text-sm text-slate-900">{r.name}</td>
+                            <td className="px-3 py-2 text-sm text-slate-700">{r.designation || "-"}</td>
+                            <td className="px-3 py-2 text-sm text-slate-700">{r.hallName}</td>
+                            <td className="px-3 py-2 text-sm text-slate-700">{r.source}</td>
+                            <td className="px-3 py-2 text-sm text-slate-500">{r.overrideReason || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="7" className="py-8 text-center text-sm text-slate-500">
+                            No records found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="md:hidden">
+          <div className="grid grid-cols-2 gap-2 p-2">
+            <div className="rounded border border-slate-200 bg-white p-2">
+              <div className="text-[10px] font-semibold text-slate-500">Role</div>
+              <div className="text-sm font-bold text-slate-900">{state.currentRole}</div>
+            </div>
+            {/* <div className="rounded border border-slate-200 bg-white p-2">
+              <div className="text-[10px] font-semibold text-slate-500">Status</div>
+              <div className={`text-sm font-bold ${totals.locked ? "text-[#E0222A]" : "text-emerald-600"}`}>
+                {totals.locked ? "Locked" : "Open"}
+              </div>
+            </div> */}
+            <div className="rounded border border-slate-200 bg-white p-2">
+              <div className="text-[10px] font-semibold text-slate-500">Capacity</div>
+              <div className="text-sm font-bold text-slate-900">{totals.totalCapacity}</div>
+            </div>
+            {/* <div className="rounded border border-slate-200 bg-white p-2">
+              <div className="text-[10px] font-semibold text-slate-500">Count</div>
+              <div className="text-sm font-bold text-slate-900">{totals.selectedCount}</div>
+            </div> */}
+          </div>
+
+          {showHrControls && (
+            <div className="mx-2 rounded border border-slate-200 bg-white p-2">
+              <button
+                type="button"
+                className="mb-2 flex w-full items-center justify-between text-left text-xs font-bold text-[#E0222A]"
+                onClick={() => setShowHrControls((v) => !v)}
+              >
+                <span>HR</span>
+                {showHrControls ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+
+              <div className="grid grid-cols-1 gap-2">
+                <input
+                  className="rounded border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#E0222A]"
+                  placeholder="Reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+                <select
+                  className="rounded border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#E0222A]"
+                  value={selectedHall}
+                  onChange={(e) => setSelectedHall(e.target.value)}
+                >
+                  {state.halls.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="rounded bg-[#E0222A] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  type="button"
+                  onClick={onMove}
+                  disabled={busy}
+                >
+                  Move
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="mx-2 mt-2 rounded border border-slate-200 bg-white p-2">
+            <div className="text-xs font-bold text-slate-900">Entry</div>
+            <div className="mt-2 flex gap-2">
+              <input
+                ref={codeInputRef}
+                className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#E0222A]"
+                placeholder={mode === "manual" ? "Code" : "Scan or type"}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                onKeyDown={handleInputKeyDown}
+              />
+              <button
+                className="rounded border border-slate-300 bg-white px-3 py-2 text-slate-700"
+                type="button"
+                onClick={onQuickCopy}
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-2 flex gap-2">
+              <button
+                className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                type="button"
+                onClick={() => onProcess()}
+              >
+                Verify
+              </button>
+              <button
+                className="flex-1 rounded bg-[#E0222A] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                type="button"
+                onClick={() => onProcess()}
+                disabled={busy || !canScan}
+              >
+                {busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <ScanLine className="mr-1 inline h-4 w-4" />}
+                Save
+              </button>
+            </div>
+          </div>
+
+          <div className="mx-2 mt-2 rounded border border-slate-200 bg-white p-2">
+            <button
+              className="flex w-full items-center justify-between text-left text-xs font-bold text-slate-900"
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+            >
+              <span>Hall Load</span>
+              {showHistory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+
+            <div className="mt-2 space-y-2">
+              {hallUsage.map((h) => (
+                <div key={h.id} className="rounded border border-slate-200 p-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold text-slate-900">{h.name}</div>
+                    <div className="text-[11px] font-bold text-slate-700">
+                      {h.used}/{h.capacity}
+                    </div>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded border border-slate-200 bg-white">
+                    <div
+                      className={`h-2 ${h.full ? "bg-[#E0222A]" : "bg-slate-700"}`}
+                      style={{ width: `${Math.min(100, Math.round((h.used / Math.max(h.capacity, 1)) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mx-2 mt-2 rounded border border-slate-200 bg-white p-2 text-[11px] text-slate-600">
+            {empResult ? `${empResult.name} (${empResult.code})` : "No match"}
+          </div>
+
+          {showHistory && (isHR || state.currentRole === "ADMIN") && (
+            <div className="mx-2 mt-2 rounded border border-slate-200 bg-white p-2">
+              <input
+                className="mb-2 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#E0222A]"
+                placeholder="Search logs"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <div className="max-h-[28vh] overflow-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr>
+                      <th className="sticky top-0 border-b bg-white px-2 py-2 text-left text-[10px] font-semibold text-slate-700">Code</th>
+                      <th className="sticky top-0 border-b bg-white px-2 py-2 text-left text-[10px] font-semibold text-slate-700">Name</th>
+                      <th className="sticky top-0 border-b bg-white px-2 py-2 text-left text-[10px] font-semibold text-slate-700">Hall</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentRows.length ? (
+                      recentRows.slice(0, 10).map((r) => (
+                        <tr key={r.id} className="border-b border-slate-200">
+                          <td className="px-2 py-2 text-[10px] text-slate-900">{r.code}</td>
+                          <td className="px-2 py-2 text-[10px] text-slate-900">{r.name}</td>
+                          <td className="px-2 py-2 text-[10px] text-slate-700">{r.hallName}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="3" className="py-4 text-center text-xs text-slate-500">
+                          No logs.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
       </div>
-
-      {selectedRow ? (
-        <div className="border-t border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          Selected entry highlighted. Use export, delete, or HR move actions.
-        </div>
-      ) : null}
     </div>
   );
 }

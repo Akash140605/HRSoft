@@ -49,7 +49,7 @@ function DashboardApp() {
     switch (activeTab) {
       case "training":
         return (
-          <div className="h-full min-h-0 overflow-hidden">
+          <div className="h-[calc(100dvh-7rem)] overflow-hidden">
             <HRTrainingRoute />
           </div>
         );
@@ -81,25 +81,23 @@ function DashboardApp() {
 
   if (isGuest && guestTrainingOpen) {
     return (
-      <div className="flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900">
-        <div className="shrink-0 border-b border-slate-200 bg-white px-2 py-2 shadow-sm">
-          <div className="flex items-center justify-between gap-2">
-            <img
-              src="/logod.png"
-              alt="Dixon"
-              className="block h-8 w-auto max-w-[44vw] object-contain"
-            />
-            <button
-              type="button"
-              onClick={() => setGuestTrainingOpen(false)}
-              className="rounded border-2 border-[#23205C] bg-[#23205C] px-3 py-1.5 text-xs font-semibold text-white"
-            >
-              Back
-            </button>
-          </div>
+      <div className="flex min-h-dvh flex-col bg-slate-50 text-slate-900">
+        <div className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-200 bg-white px-2 py-2 shadow-sm">
+          <img
+            src="/logod.png"
+            alt="Dixon"
+            className="block h-8 w-auto max-w-[44vw] object-contain"
+          />
+          <button
+            type="button"
+            onClick={() => setGuestTrainingOpen(false)}
+            className="rounded border-2 border-[#23205C] bg-[#23205C] px-3 py-1.5 text-xs font-semibold text-white"
+          >
+            Back
+          </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden">
           <HRTrainingRoute />
         </div>
       </div>
@@ -111,8 +109,8 @@ function DashboardApp() {
   }
 
   return (
-    <div className="fixed inset-0 flex h-dvh w-full flex-col overflow-hidden bg-slate-50 text-slate-900">
-      <header className="shrink-0 border-b border-slate-200 bg-white shadow-sm">
+    <div className="flex min-h-dvh w-full flex-col overflow-x-hidden bg-slate-50 text-slate-900">
+      <header className="fixed inset-x-0 top-0 z-50 w-full border-b border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between gap-2 px-2 py-2">
           <img
             src="/logod.png"
@@ -148,10 +146,8 @@ function DashboardApp() {
         </div>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-hidden px-2 py-2">
-        <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-hidden">
-          {renderTab()}
-        </div>
+      <main className="flex-1 overflow-y-auto px-2 pb-3 pt-[7.1rem]">
+        <div className="grid  grid-cols-1 gap-3">{renderTab()}</div>
       </main>
     </div>
   );
