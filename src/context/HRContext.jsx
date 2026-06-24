@@ -10,7 +10,7 @@ import { DEFAULT_EMPLOYEES, DEFAULT_HALLS, SHIFT_OPTIONS, DAYS } from "../data/d
 import hrApi from "../api/hrApi";
 
 const HRContext = createContext(null);
-const STORAGE_KEY = "demo_hr_system_v6";
+const STORAGE_KEY = "demo_hr_system_v7";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const dateKey = (v) => String(v || "").slice(0, 10);
@@ -18,6 +18,20 @@ const dayName = (dateStr) => new Date(dateStr).toLocaleDateString("en-US", { wee
 
 const normalizeEmployee = (e, fallbackHall = null) => ({
   id: e.id ?? e.code,
+  name: e.name || "",
+  code: String(e.code || "").trim(),
+  designation: e.designation || "",
+  weekOff: e.week_off || e.weekOff || "Sunday",
+  shift: e.shift || "A",
+  hallId: e.hall_id || e.hallId || fallbackHall?.id || "",
+  hallName: e.hall_name || e.hallName || fallbackHall?.name || "",
+});
+
+const normalizeRoster = (e, fallbackHall = null) => ({
+  id: e.id ?? e.code,
+  week_key: e.week_key || "",
+  week_start: e.week_start || "",
+  week_end: e.week_end || "",
   name: e.name || "",
   code: String(e.code || "").trim(),
   designation: e.designation || "",
@@ -72,6 +86,7 @@ const createInitialState = () => ({
   currentHrCode: "",
   halls: DEFAULT_HALLS.map(normalizeHall),
   employees: DEFAULT_EMPLOYEES.map((e) => normalizeEmployee(e, DEFAULT_HALLS[0])),
+  roster: [],
   entries: [],
   logs: [],
   attendanceTracker: [],
@@ -95,6 +110,7 @@ const getArray = (data) => {
   if (Array.isArray(data?.employees)) return data.employees;
   if (Array.isArray(data?.halls)) return data.halls;
   if (Array.isArray(data?.attendance)) return data.attendance;
+  if (Array.isArray(data?.roster)) return data.roster;
   return [];
 };
 
@@ -190,6 +206,11 @@ export function HRProvider({ children }) {
   const employeeMap = useMemo(
     () => new Map(state.employees.map((e) => [String(e.code).trim(), e])),
     [state.employees]
+  );
+
+  const rosterMap = useMemo(
+    () => new Map(state.roster.map((e) => [String(e.code).trim(), e])),
+    [state.roster]
   );
 
   const activeEntries = useMemo(
@@ -306,37 +327,72 @@ export function HRProvider({ children }) {
     }));
   }, []);
 
-  const pushLog = useCallback(
-    async (row) => {
-      const normalized = {
-        type: row.type || "",
-        message: row.message || "",
-        by: row.by || "",
-        employee_code: row.employeeCode || "",
-        hall_id: row.hallId || "",
-        hall_name: row.hallName || "",
-        override_reason: row.overrideReason || "",
-        at: row.at || new Date().toISOString(),
-      };
+  const pushLog = useCallback(async (row) => {
+    const normalized = {
+      type: row.type || "",
+      message: row.message || "",
+      by: row.by || "",
+      employee_code: row.employeeCode || "",
+      hall_id: row.hallId || "",
+      hall_name: row.hallName || "",
+      override_reason: row.overrideReason || "",
+      at: row.at || new Date().toISOString(),
+    };
 
-      const res = await hrApi.addLog(normalized);
-      const localRow = { ...makeLogRow(row.type, row.message, row), ...row };
+    const res = await hrApi.addLog(normalized);
+    const localRow = { ...makeLogRow(row.type, row.message, row), ...row };
 
-      setState((prev) => ({
-        ...prev,
-        logs: res?.success
-          ? [makeLogRow(row.type, row.message, { ...row, id: res.data?.id || localRow.id }), ...prev.logs]
-          : [localRow, ...prev.logs],
-      }));
+    setState((prev) => ({
+      ...prev,
+      logs: res?.success
+        ? [makeLogRow(row.type, row.message, { ...row, id: res.data?.id || localRow.id }), ...prev.logs]
+        : [localRow, ...prev.logs],
+    }));
 
-      return res;
-    },
-    []
-  );
+    return res;
+  }, []);
 
   const refreshAfterWrite = useCallback(async () => {
     await fetchAllDataFromAPI();
   }, [fetchAllDataFromAPI]);
+
+  const refreshRoster = useCallback(async (weekKey = "") => {
+    const res = await hrApi.getRoster(weekKey);
+    if (!res?.success) return res;
+    const fallbackHall = state.halls?.[0] || null;
+    const list = getArray(res.data ?? res).map((r) => normalizeRoster(r, fallbackHall));
+    setState((prev) => ({ ...prev, roster: list }));
+    return res;
+  }, [state.halls]);
+
+  const upsertRosterLocal = useCallback((row) => {
+    setState((prev) => {
+      const exists = prev.roster.some((r) => String(r.id) === String(row.id));
+      const next = exists
+        ? prev.roster.map((r) => (String(r.id) === String(row.id) ? row : r))
+        : [row, ...prev.roster];
+      return { ...prev, roster: next };
+    });
+  }, []);
+
+  const deleteRosterLocal = useCallback((id) => {
+    setState((prev) => ({
+      ...prev,
+      roster: prev.roster.filter((r) => String(r.id) !== String(id)),
+    }));
+  }, []);
+
+  const bulkImportRoster = useCallback(async (payload) => {
+    const res = await hrApi.bulkImportRoster(payload);
+    if (res?.success) await refreshRoster(payload?.week_key || "");
+    return res;
+  }, [refreshRoster]);
+
+  const importRosterFromWeek = useCallback(async (payload) => {
+    const res = await hrApi.importRosterFromWeek(payload);
+    if (res?.success) await refreshRoster(payload?.week_key || "");
+    return res;
+  }, [refreshRoster]);
 
   const deleteOldScanEntriesByCode = useCallback(
     async (code) => {
@@ -612,24 +668,36 @@ export function HRProvider({ children }) {
       fetchAllDataFromAPI,
       pushLog,
       refreshAfterWrite,
+      rosterMap,
+      refreshRoster,
+      bulkImportRoster,
+      importRosterFromWeek,
+      upsertRosterLocal,
+      deleteRosterLocal,
     }),
     [
       activeEntries,
+      bulkImportRoster,
       canOverride,
+      deleteRosterLocal,
       fetchAllDataFromAPI,
+      getAttendanceTracker,
       hallUsage,
       hrOverrideEntry,
+      importRosterFromWeek,
       login,
       logout,
       moveEmployeeToHall,
       processEntry,
       pushLog,
       refreshAfterWrite,
+      refreshRoster,
       resetAll,
+      rosterMap,
       state,
       totals,
       updateState,
-      getAttendanceTracker,
+      upsertRosterLocal,
     ]
   );
 

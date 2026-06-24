@@ -82,6 +82,15 @@ export const updateEmployee = (id, data) => apiCall(`employees/${encodeURICompon
 export const deleteEmployee = (id) => apiCall(`employees/${encodeURIComponent(id)}`, "DELETE");
 export const bulkImportEmployees = (data) => apiCall("employees/bulk-import", "POST", data);
 
+export const getRoster = (weekKey, hallId = "") =>
+  apiCall("roster", "GET", null, { week_key: weekKey, hall_id: hallId });
+
+export const addRosterRow = (data) => apiCall("roster", "POST", data);
+export const updateRosterRow = (id, data) => apiCall(`roster/${encodeURIComponent(id)}`, "PUT", data);
+export const deleteRosterRow = (id) => apiCall(`roster/${encodeURIComponent(id)}`, "DELETE");
+export const bulkImportRoster = (data) => apiCall("roster/bulk-import", "POST", data);
+export const importRosterFromWeek = (data) => apiCall("roster/import-prev", "POST", data);
+
 export const getHalls = () => apiCall("halls");
 export const addHall = (data) => apiCall("halls", "POST", data);
 export const updateHall = (id, data) => apiCall(`halls/${encodeURIComponent(id)}`, "PUT", data);
@@ -100,9 +109,7 @@ export const addLog = (data) => apiCall("logs", "POST", data);
 export const getAttendance = (code) => apiCall(`attendance/${encodeURIComponent(code)}`);
 export const getAllAttendance = () => apiCall("attendance");
 
-export const login = (username, password) =>
-  authCall("login", "POST", { username, password });
-
+export const login = (username, password) => authCall("login", "POST", { username, password });
 export const me = () => authCall("me", "GET");
 export const logout = () => authCall("logout", "POST");
 
@@ -113,6 +120,12 @@ export default {
   updateEmployee,
   deleteEmployee,
   bulkImportEmployees,
+  getRoster,
+  addRosterRow,
+  updateRosterRow,
+  deleteRosterRow,
+  bulkImportRoster,
+  importRosterFromWeek,
   getHalls,
   addHall,
   updateHall,
