@@ -90,6 +90,13 @@ export default function RosterManager() {
   const [loading, setLoading] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+  const [filters, setFilters] = useState({
+    hallId: "",
+    shift: "",
+    weekOff: "",
+    designation: "",
+  });
+
   const rosterRows = state.roster || [];
 
   useEffect(() => {
@@ -104,15 +111,31 @@ export default function RosterManager() {
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
+
     return rosterRows.filter((e) => {
-      if (!q) return true;
-      return `${e.name || ""} ${e.code || ""} ${e.designation || ""} ${
-        e.hallName || ""
-      } ${e.shift || ""} ${e.weekOff || ""}`
-        .toLowerCase()
-        .includes(q);
+      const matchesSearch =
+        !q ||
+        `${e.name || ""} ${e.code || ""} ${e.designation || ""} ${e.hallName || ""} ${e.shift || ""} ${e.weekOff || ""}`
+          .toLowerCase()
+          .includes(q);
+
+      const matchesHall =
+        !filters.hallId || String(e.hallId || "") === String(filters.hallId);
+
+      const matchesShift =
+        !filters.shift || String(e.shift || "") === String(filters.shift);
+
+      const matchesWeekOff =
+        !filters.weekOff ||
+        String(e.weekOff || "").toLowerCase() === String(filters.weekOff).toLowerCase();
+
+      const matchesDesignation =
+        !filters.designation ||
+        String(e.designation || "").toLowerCase().includes(String(filters.designation).toLowerCase());
+
+      return matchesSearch && matchesHall && matchesShift && matchesWeekOff && matchesDesignation;
     });
-  }, [query, rosterRows]);
+  }, [query, rosterRows, filters]);
 
   const clearForm = () => {
     setEditingId(null);
@@ -577,18 +600,72 @@ export default function RosterManager() {
           <HelpCircle className="h-4 w-4" />
           CSV Import Help
         </div>
-        <p className="mt-2">
-          Excel me first row headers exactly ye honi chahiye:
-        </p>
+        <p className="mt-2">Excel me first row headers exactly ye honi chahiye:</p>
         <code className="mt-2 block break-all rounded bg-white px-2 py-1">
           week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
         </code>
-        <p className="mt-2">
-          Example row:
-        </p>
+        <p className="mt-2">Example row:</p>
         <code className="mt-2 block break-all rounded bg-white px-2 py-1">
           2026-W26,2026-06-22,2026-06-28,KHUSH RAVI,165990,OPERATOR,Monday,AA,Hall 1
         </code>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2">
+        <select
+          className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
+          value={filters.hallId}
+          onChange={(e) => setFilters((p) => ({ ...p, hallId: e.target.value }))}
+        >
+          <option value="">All Halls</option>
+          {state.halls.map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
+          value={filters.shift}
+          onChange={(e) => setFilters((p) => ({ ...p, shift: e.target.value }))}
+        >
+          <option value="">All Shifts</option>
+          {["A", "B", "C", "AA", "BB", "G"].map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
+          value={filters.weekOff}
+          onChange={(e) => setFilters((p) => ({ ...p, weekOff: e.target.value }))}
+        >
+          <option value="">All Week Off</option>
+          {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+
+        <input
+          className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
+          placeholder="Designation filter"
+          value={filters.designation}
+          onChange={(e) => setFilters((p) => ({ ...p, designation: e.target.value }))}
+        />
+
+        <button
+          type="button"
+          className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
+          onClick={() =>
+            setFilters({ hallId: "", shift: "", weekOff: "", designation: "" })
+          }
+        >
+          Reset Filters
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-2">
