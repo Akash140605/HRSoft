@@ -88,10 +88,8 @@ export default function RosterManager() {
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-
   const [filters, setFilters] = useState({
     hallId: "",
     shift: "",
@@ -272,7 +270,9 @@ export default function RosterManager() {
           return { ...prev, roster: nextRoster };
         });
 
-        setMessage(editingId ? "Roster updated successfully!" : "Roster row added successfully!");
+        setMessage(
+          editingId ? "Roster updated successfully!" : "Roster row added successfully!"
+        );
         setEditingId(null);
         clearForm();
       } else {
@@ -395,7 +395,9 @@ export default function RosterManager() {
         const idxShift = findCol("shift");
         const idxHallName = findCol("hallname", "hall_name", "hall");
 
-        const normalizeText = (val) => String(val || "").trim().toLowerCase().replace(/\s+/g, " ");
+        const normalizeText = (val) =>
+          String(val || "").trim().toLowerCase().replace(/\s+/g, " ");
+
         const hallsLookup = (state.halls || []).map((h) => ({
           ...h,
           _normName: normalizeText(h.name),
@@ -553,7 +555,8 @@ export default function RosterManager() {
     return { total: rows.length, hallsUsed: byHall.size };
   }, [rows]);
 
-  const resetFilters = () => setFilters({ hallId: "", shift: "", weekOff: "", designation: "" });
+  const resetFilters = () =>
+    setFilters({ hallId: "", shift: "", weekOff: "", designation: "" });
 
   const FilterPanel = ({ compact = false, onClose = null }) => (
     <div className="space-y-4">
@@ -600,7 +603,7 @@ export default function RosterManager() {
           <div className="mt-2 text-xl font-bold text-slate-900">{stats.hallsUsed}</div>
         </div>
       </div>
-
+{/* 
       <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">
         <div className="flex items-center gap-2 font-semibold text-slate-800">
           <HelpCircle className="h-4 w-4" />
@@ -614,7 +617,7 @@ export default function RosterManager() {
         <code className="mt-2 block break-all rounded bg-white px-2 py-1">
           2026-W26,2026-06-22,2026-06-28,KHUSH RAVI,165990,OPERATOR,Monday,AA,Hall 1
         </code>
-      </div>
+      </div> */}
 
       <div className="grid grid-cols-1 gap-2">
         <select
@@ -673,13 +676,30 @@ export default function RosterManager() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button className="border-2 border-white/30 bg-[#23205C] px-4 py-2 text-sm font-semibold text-white hover:bg-[#23205C]/90" type="button" onClick={exportCsv}>
+        <button
+          className="border-2 border-white/30 bg-[#23205C] px-4 py-2 text-sm font-semibold text-white hover:bg-[#23205C]/90"
+          type="button"
+          onClick={exportCsv}
+        >
           <Download className="mr-1 inline h-4 w-4" />
           Export CSV
         </button>
-        <button className="border-2 border-white/30 bg-[#23205C] px-4 py-2 text-sm font-semibold text-white hover:bg-[#23205C]/90" type="button" onClick={exportExcel}>
+        <button
+          className="border-2 border-white/30 bg-[#23205C] px-4 py-2 text-sm font-semibold text-white hover:bg-[#23205C]/90"
+          type="button"
+          onClick={exportExcel}
+        >
           <FileSpreadsheet className="mr-1 inline h-4 w-4" />
           Export Excel
+        </button>
+        <button
+          className="border-2 border-[#E0222A] bg-[#E0222A] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          type="button"
+          onClick={deleteSelectedEmployees}
+          disabled={loading || (!selectedIds.length && !rows.length)}
+        >
+          <Trash className="mr-1 inline h-4 w-4" />
+          Delete
         </button>
       </div>
 
@@ -727,7 +747,7 @@ export default function RosterManager() {
             <p className="mt-1 text-sm text-white/70">Weekly roster master</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               className="inline-flex items-center gap-2 border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white md:hidden"
@@ -744,21 +764,6 @@ export default function RosterManager() {
               <HelpCircle className="h-4 w-4" />
               Help
             </button>
-
-            <div className="hidden flex-wrap gap-2 md:flex">
-              <button className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20" type="button" onClick={exportCsv}>
-                <Download className="mr-1 inline h-4 w-4" />
-                Export CSV
-              </button>
-              <button className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20" type="button" onClick={exportExcel}>
-                <FileSpreadsheet className="mr-1 inline h-4 w-4" />
-                Export Excel
-              </button>
-              <button className="border-2 border-[#E0222A] bg-[#E0222A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#E0222A]/90 disabled:opacity-50" type="button" onClick={deleteSelectedEmployees} disabled={loading || (!selectedIds.length && !rows.length)}>
-                <Trash className="mr-1 inline h-4 w-4" />
-                Delete Selected / All
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -839,7 +844,11 @@ export default function RosterManager() {
               onClick={upsertEmp}
               disabled={loading}
             >
-              {editingId ? <Save className="mr-1 inline h-4 w-4" /> : <Plus className="mr-1 inline h-4 w-4" />}
+              {editingId ? (
+                <Save className="mr-1 inline h-4 w-4" />
+              ) : (
+                <Plus className="mr-1 inline h-4 w-4" />
+              )}
               {editingId ? "Update Row" : "Add Row"}
             </button>
             <button
@@ -895,22 +904,40 @@ export default function RosterManager() {
                     rows.map((r) => (
                       <tr key={`${r.id}-${r.code}`} className="border-b border-slate-200">
                         <td className="px-3 py-3 text-sm">
-                          <input type="checkbox" checked={selectedIds.includes(r.id)} onChange={() => toggleSelect(r.id)} />
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(r.id)}
+                            onChange={() => toggleSelect(r.id)}
+                          />
                         </td>
-                        <td className="px-3 py-3 text-sm font-bold text-slate-900">{r.name}</td>
+                        <td className="px-3 py-3 text-sm font-bold text-slate-900">
+                          {r.name}
+                        </td>
                         <td className="px-3 py-3 text-sm text-slate-700">{r.code}</td>
-                        <td className="px-3 py-3 text-sm text-slate-700">{r.designation || "-"}</td>
+                        <td className="px-3 py-3 text-sm text-slate-700">
+                          {r.designation || "-"}
+                        </td>
                         <td className="px-3 py-3 text-sm">
-                          <span className="border-2 border-slate-300 bg-white px-2 py-1 text-slate-700">{r.hallName}</span>
+                          <span className="border-2 border-slate-300 bg-white px-2 py-1 text-slate-700">
+                            {r.hallName}
+                          </span>
                         </td>
                         <td className="px-3 py-3 text-sm text-slate-700">{r.shift}</td>
                         <td className="px-3 py-3 text-sm text-slate-700">{r.weekOff}</td>
                         <td className="px-3 py-3 text-sm">
                           <div className="flex flex-wrap gap-2">
-                            <button className="border-2 border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700" type="button" onClick={() => startEdit(r)}>
+                            <button
+                              className="border-2 border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700"
+                              type="button"
+                              onClick={() => startEdit(r)}
+                            >
                               <Edit3 className="h-4 w-4" />
                             </button>
-                            <button className="border-2 border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 font-semibold text-[#E0222A]" type="button" onClick={() => removeRow(r.id)}>
+                            <button
+                              className="border-2 border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 font-semibold text-[#E0222A]"
+                              type="button"
+                              onClick={() => removeRow(r.id)}
+                            >
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
@@ -933,7 +960,10 @@ export default function RosterManager() {
 
       {isFilterOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setIsFilterOpen(false)} />
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setIsFilterOpen(false)}
+          />
           <div className="absolute right-0 top-0 h-full w-[92%] max-w-sm overflow-y-auto bg-white p-4 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900">Filters</h3>
@@ -972,7 +1002,8 @@ export default function RosterManager() {
             </code>
 
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              Excel me pehle row me headers daalo, neeche data bharo, phir Save As → CSV UTF-8 format me export karo.
+              Excel me pehle row me headers daalo, neeche data bharo, phir Save As →
+              CSV UTF-8 format me export karo.
             </div>
           </div>
         </div>
