@@ -677,7 +677,7 @@ export default function RosterManager() {
               value={form.shift}
               onChange={(e) => setForm((p) => ({ ...p, shift: e.target.value }))}
             >
-              {["A", "B", "C", "AA", "BB"].map((s) => (
+              {["A", "B", "C", "AA", "BB", "G"].map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
