@@ -88,7 +88,9 @@ export default function RosterManager() {
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const [filters, setFilters] = useState({
     hallId: "",
@@ -131,7 +133,9 @@ export default function RosterManager() {
 
       const matchesDesignation =
         !filters.designation ||
-        String(e.designation || "").toLowerCase().includes(String(filters.designation).toLowerCase());
+        String(e.designation || "")
+          .toLowerCase()
+          .includes(String(filters.designation).toLowerCase());
 
       return matchesSearch && matchesHall && matchesShift && matchesWeekOff && matchesDesignation;
     });
@@ -549,7 +553,9 @@ export default function RosterManager() {
     return { total: rows.length, hallsUsed: byHall.size };
   }, [rows]);
 
-  const FilterPanel = () => (
+  const resetFilters = () => setFilters({ hallId: "", shift: "", weekOff: "", designation: "" });
+
+  const FilterPanel = ({ compact = false, onClose = null }) => (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <CalendarDays className="h-4 w-4 text-slate-700" />
@@ -660,9 +666,7 @@ export default function RosterManager() {
         <button
           type="button"
           className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
-          onClick={() =>
-            setFilters({ hallId: "", shift: "", weekOff: "", designation: "" })
-          }
+          onClick={resetFilters}
         >
           Reset Filters
         </button>
@@ -677,10 +681,6 @@ export default function RosterManager() {
           <FileSpreadsheet className="mr-1 inline h-4 w-4" />
           Export Excel
         </button>
-        <button className="border-2 border-[#E0222A] bg-[#E0222A] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" type="button" onClick={deleteSelectedEmployees} disabled={loading || (!selectedIds.length && !rows.length)}>
-          <Trash className="mr-1 inline h-4 w-4" />
-          Delete
-        </button>
       </div>
 
       <label className="cursor-pointer inline-flex w-full items-center justify-center gap-2 border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700">
@@ -694,15 +694,27 @@ export default function RosterManager() {
         />
       </label>
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          className="w-full border-2 border-slate-300 bg-white px-4 py-3 pl-9 text-slate-900 outline-none focus:border-[#E0222A]"
-          placeholder="Search roster"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </div>
+      {!compact && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            className="w-full border-2 border-slate-300 bg-white px-4 py-3 pl-9 text-slate-900 outline-none focus:border-[#E0222A]"
+            placeholder="Search roster"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      )}
+
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
+        >
+          Close
+        </button>
+      )}
     </div>
   );
 
@@ -715,38 +727,60 @@ export default function RosterManager() {
             <p className="mt-1 text-sm text-white/70">Weekly roster master</p>
           </div>
 
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white md:hidden"
-            onClick={() => setIsFilterOpen(true)}
-          >
-            <Filter className="h-4 w-4" />
-            Filters
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white md:hidden"
+              onClick={() => setIsFilterOpen(true)}
+            >
+              <Filter className="h-4 w-4" />
+              Filters
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white"
+              onClick={() => setIsHelpOpen(true)}
+            >
+              <HelpCircle className="h-4 w-4" />
+              Help
+            </button>
 
-          <div className="hidden flex-wrap gap-2 md:flex">
-            <button className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20" type="button" onClick={exportCsv}>
-              <Download className="mr-1 inline h-4 w-4" />
-              Export CSV
-            </button>
-            <button className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20" type="button" onClick={exportExcel}>
-              <FileSpreadsheet className="mr-1 inline h-4 w-4" />
-              Export Excel
-            </button>
-            <button className="border-2 border-[#E0222A] bg-[#E0222A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#E0222A]/90 disabled:opacity-50" type="button" onClick={deleteSelectedEmployees} disabled={loading || (!selectedIds.length && !rows.length)}>
-              <Trash className="mr-1 inline h-4 w-4" />
-              Delete Selected / All
-            </button>
+            <div className="hidden flex-wrap gap-2 md:flex">
+              <button className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20" type="button" onClick={exportCsv}>
+                <Download className="mr-1 inline h-4 w-4" />
+                Export CSV
+              </button>
+              <button className="border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20" type="button" onClick={exportExcel}>
+                <FileSpreadsheet className="mr-1 inline h-4 w-4" />
+                Export Excel
+              </button>
+              <button className="border-2 border-[#E0222A] bg-[#E0222A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#E0222A]/90 disabled:opacity-50" type="button" onClick={deleteSelectedEmployees} disabled={loading || (!selectedIds.length && !rows.length)}>
+                <Trash className="mr-1 inline h-4 w-4" />
+                Delete Selected / All
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="grid gap-0 md:grid-cols-[320px_1fr]">
-        <div className="hidden border-r border-slate-300 p-4 md:block">
+        <aside className="hidden border-r border-slate-300 p-4 md:block">
           <FilterPanel />
-        </div>
+        </aside>
 
-        <div className="p-4 md:p-5">
+        <main className="p-4 md:p-5">
+          <div className="mb-4 flex items-center gap-2 md:hidden">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="w-full border-2 border-slate-300 bg-white px-4 py-3 pl-9 text-slate-900 outline-none focus:border-[#E0222A]"
+                placeholder="Search roster"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
           <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-6">
             <input
               className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] md:col-span-2"
@@ -894,20 +928,52 @@ export default function RosterManager() {
               </table>
             </div>
           </div>
-        </div>
+        </main>
       </div>
 
       {isFilterOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setIsFilterOpen(false)} />
-          <div className="absolute right-0 top-0 h-full w-[88%] max-w-sm overflow-y-auto bg-white p-4 shadow-2xl">
+          <div className="absolute right-0 top-0 h-full w-[92%] max-w-sm overflow-y-auto bg-white p-4 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900">Filters</h3>
               <button type="button" onClick={() => setIsFilterOpen(false)}>
                 <X className="h-5 w-5 text-slate-700" />
               </button>
             </div>
-            <FilterPanel />
+            <FilterPanel compact onClose={() => setIsFilterOpen(false)} />
+          </div>
+        </div>
+      )}
+
+      {isHelpOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative w-full max-w-2xl rounded-xl bg-white p-5 shadow-2xl">
+            <button
+              type="button"
+              className="absolute right-3 top-3 rounded p-1 text-slate-600 hover:bg-slate-100"
+              onClick={() => setIsHelpOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <h3 className="text-lg font-bold text-slate-900">CSV Import Help</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Excel me first row headers exactly ye honi chahiye:
+            </p>
+
+            <code className="mt-3 block break-all rounded bg-slate-100 px-3 py-2 text-xs">
+              week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
+            </code>
+
+            <p className="mt-4 text-sm text-slate-600">Example row:</p>
+            <code className="mt-2 block break-all rounded bg-slate-100 px-3 py-2 text-xs">
+              2026-W26,2026-06-22,2026-06-28,KHUSH RAVI,165990,OPERATOR,Monday,AA,Hall 1
+            </code>
+
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              Excel me pehle row me headers daalo, neeche data bharo, phir Save As → CSV UTF-8 format me export karo.
+            </div>
           </div>
         </div>
       )}
