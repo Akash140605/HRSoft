@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   FileUp,
   Plus,
-  Search,
   Trash2,
   Edit3,
   Save,
@@ -224,7 +223,6 @@ export default function RosterManager() {
     const visibleIds = rows.map((r) => r.id);
     const allSelected =
       visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
-
     setSelectedIds((prev) =>
       allSelected
         ? prev.filter((id) => !visibleIds.includes(id))
@@ -296,7 +294,17 @@ export default function RosterManager() {
         : await hrApi.addRosterRow(rosterData);
 
       if (response.success) {
-        const returned = normalizeRow(response.data || {}, hall);
+        const returned = normalizeRow(
+          {
+            ...(response.data || {}),
+            hallId: rosterData.hall_id,
+            hallName: rosterData.hall_name,
+            week_key: rosterData.week_key,
+            week_start: rosterData.week_start,
+            week_end: rosterData.week_end,
+          },
+          hall
+        );
 
         setState((prev) => {
           const nextRoster = editingId
@@ -320,6 +328,8 @@ export default function RosterManager() {
 
   const startEdit = (row) => {
     const wk = row.week_key || weekKey;
+    const hall = halls.find((h) => String(h.id) === String(row.hallId || row.hall_id)) || null;
+
     setEditingId(row.id);
     setWeekKey(wk);
     setForm({
@@ -331,8 +341,8 @@ export default function RosterManager() {
       designation: row.designation || "",
       weekOff: row.weekOff || "Sunday",
       shift: row.shift || "A",
-      hallId: row.hallId || "",
-      hallName: row.hallName || "",
+      hallId: hall?.id || row.hallId || row.hall_id || "",
+      hallName: hall?.name || row.hallName || row.hall_name || "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -368,8 +378,6 @@ export default function RosterManager() {
 
   const headers = ["week_key", "week_start", "week_end", "name", "code", "designation", "weekOff", "shift", "hallName"];
 
-  const resetFilters = () => setFilters({ hallId: "", shift: "", weekOff: "", designation: "" });
-
   return (
     <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
       <div className="border-b border-slate-300 bg-[#23205C] px-4 py-3">
@@ -378,7 +386,6 @@ export default function RosterManager() {
             <h2 className="text-lg font-bold text-white">Roster Manager</h2>
             <p className="mt-0.5 text-xs text-white/70">Weekly roster master</p>
           </div>
-
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -403,16 +410,7 @@ export default function RosterManager() {
       <div className="grid gap-0 md:grid-cols-[270px_1fr]">
         <aside className="hidden border-r border-slate-300 p-3 md:block">
           <div className="space-y-3">
-            <Field
-              label="Week Key"
-              value={form.weekKey}
-              onChange={(e) => {
-                const value = e.target.value;
-                setForm((p) => ({ ...p, weekKey: value }));
-                setWeekKey(value);
-              }}
-              placeholder="2026-W26"
-            />
+            <Field label="Week Key" value={form.weekKey} onChange={(e) => { const value = e.target.value; setForm((p) => ({ ...p, weekKey: value })); setWeekKey(value); }} />
             <Field label="Week Start" value={form.weekStart} onChange={(e) => setForm((p) => ({ ...p, weekStart: e.target.value }))} />
             <Field label="Week End" value={form.weekEnd} onChange={(e) => setForm((p) => ({ ...p, weekEnd: e.target.value }))} />
             <Field label="Copy From" placeholder="2026-W25" value={sourceWeekKey} onChange={(e) => setSourceWeekKey(e.target.value)} />
@@ -455,11 +453,7 @@ export default function RosterManager() {
               ))}
             </SelectField>
 
-            <SelectField
-              label="Week Off"
-              value={form.weekOff}
-              onChange={(e) => setForm((p) => ({ ...p, weekOff: e.target.value }))}
-            >
+            <SelectField label="Week Off" value={form.weekOff} onChange={(e) => setForm((p) => ({ ...p, weekOff: e.target.value }))}>
               {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
                 <option key={d} value={d}>
                   {d}
@@ -487,11 +481,7 @@ export default function RosterManager() {
               ))}
             </SelectField>
 
-            <Field label="Week Key" value={form.weekKey} onChange={(e) => {
-              const value = e.target.value;
-              setForm((p) => ({ ...p, weekKey: value }));
-              setWeekKey(value);
-            }} />
+            <Field label="Week Key" value={form.weekKey} onChange={(e) => { const value = e.target.value; setForm((p) => ({ ...p, weekKey: value })); setWeekKey(value); }} />
             <Field label="Week Start" value={form.weekStart} onChange={(e) => setForm((p) => ({ ...p, weekStart: e.target.value }))} />
             <Field label="Week End" value={form.weekEnd} onChange={(e) => setForm((p) => ({ ...p, weekEnd: e.target.value }))} />
 
@@ -619,6 +609,31 @@ export default function RosterManager() {
           </div>
         </main>
       </div>
+
+      {isHelpOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative w-full max-w-2xl rounded-xl bg-white p-5 shadow-2xl">
+            <button
+              type="button"
+              className="absolute right-3 top-3 rounded p-1 text-slate-600 hover:bg-slate-100"
+              onClick={() => setIsHelpOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="text-lg font-bold text-slate-900">CSV Import Help</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Excel me first row headers exactly ye honi chahiye:
+            </p>
+            <code className="mt-3 block break-words whitespace-normal rounded bg-slate-100 px-3 py-2 text-xs">
+              week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
+            </code>
+            <p className="mt-4 text-sm text-slate-600">Example row:</p>
+            <code className="mt-2 block break-words whitespace-normal rounded bg-slate-100 px-3 py-2 text-xs">
+              2026-W26,2026-06-22,2026-06-28,KHUSH RAVI,165990,OPERATOR,Monday,AA,Hall 1
+            </code>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
