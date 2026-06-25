@@ -2,34 +2,41 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   FileUp,
   Plus,
+  Search,
   Trash2,
   Edit3,
   Save,
+  FileSpreadsheet,
   X,
   AlertCircle,
   Copy,
   Filter,
   HelpCircle,
+  Download,
+  Trash,
+  Building2,
+  Users,
 } from "lucide-react";
 import { useHR } from "../context/HRContext";
 import hrApi from "../api/hrApi";
 
 const normalizeRow = (row, fallbackHall = null) => ({
-  id: row.id ?? row.code ?? Date.now(),
-  week_key: row.week_key ?? row.weekKey ?? "",
-  week_start: row.week_start ?? row.weekStart ?? "",
-  week_end: row.week_end ?? row.weekEnd ?? "",
-  name: row.name ?? "",
-  code: String(row.code ?? "").trim(),
-  designation: row.designation ?? "",
-  weekOff: row.weekOff ?? row.week_off ?? "Sunday",
-  shift: row.shift ?? "A",
-  hallId: row.hallId ?? row.hall_id ?? fallbackHall?.id ?? "",
-  hallName: row.hallName ?? row.hall_name ?? fallbackHall?.name ?? "",
+  id: row.id || row.code || Date.now(),
+  week_key: row.week_key || "",
+  week_start: row.week_start || "",
+  week_end: row.week_end || "",
+  name: row.name || "",
+  code: String(row.code || "").trim(),
+  designation: row.designation || "",
+  weekOff: row.weekOff || row.week_off || "Sunday",
+  shift: row.shift || "A",
+  hallId: row.hallId || row.hall_id || fallbackHall?.id || "",
+  hallName: row.hallName || row.hall_name || fallbackHall?.name || "",
 });
 
 const pad2 = (n) => String(n).padStart(2, "0");
-const formatDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const formatDate = (d) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 const getIsoWeekInfo = (date = new Date()) => {
   const d = new Date(date);
@@ -294,22 +301,13 @@ export default function RosterManager() {
         : await hrApi.addRosterRow(rosterData);
 
       if (response.success) {
-        const returned = normalizeRow(
-          {
-            ...(response.data || {}),
-            hallId: rosterData.hall_id,
-            hallName: rosterData.hall_name,
-            week_key: rosterData.week_key,
-            week_start: rosterData.week_start,
-            week_end: rosterData.week_end,
-          },
-          hall
-        );
+        const returned = normalizeRow(response.data || {}, hall);
 
         setState((prev) => {
           const nextRoster = editingId
             ? prev.roster.map((e) => (String(e.id) === String(editingId) ? returned : e))
             : [returned, ...prev.roster.filter((e) => String(e.code) !== String(returned.code))];
+
           return { ...prev, roster: nextRoster };
         });
 
@@ -328,8 +326,6 @@ export default function RosterManager() {
 
   const startEdit = (row) => {
     const wk = row.week_key || weekKey;
-    const hall = halls.find((h) => String(h.id) === String(row.hallId || row.hall_id)) || null;
-
     setEditingId(row.id);
     setWeekKey(wk);
     setForm({
@@ -341,8 +337,8 @@ export default function RosterManager() {
       designation: row.designation || "",
       weekOff: row.weekOff || "Sunday",
       shift: row.shift || "A",
-      hallId: hall?.id || row.hallId || row.hall_id || "",
-      hallName: hall?.name || row.hallName || row.hall_name || "",
+      hallId: row.hallId || "",
+      hallName: row.hallName || "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -376,7 +372,238 @@ export default function RosterManager() {
     }
   };
 
-  const headers = ["week_key", "week_start", "week_end", "name", "code", "designation", "weekOff", "shift", "hallName"];
+  const headers = [
+    "week_key",
+    "week_start",
+    "week_end",
+    "name",
+    "code",
+    "designation",
+    "weekOff",
+    "shift",
+    "hallName",
+  ];
+
+  const toCsv = (data) =>
+    [headers, ...data.map((r) => headers.map((h) => r[h] ?? r[h.replace("weekOff", "week_off")] ?? ""))]
+      .map((line) => line.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+
+  const exportCsv = () => {
+    const blob = new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `roster-${weekKey}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = () => {
+    const html = `
+      <html><head><meta charset="utf-8" /></head><body>
+      <table border="1">
+        <tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>
+        ${rows
+          .map(
+            (r) =>
+              `<tr>${headers
+                .map((h) => `<td>${String(r[h] ?? "").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</td>`)
+                .join("")}</tr>`
+          )
+          .join("")}
+      </table>
+      </body></html>
+    `;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `roster-${weekKey}.xls`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importCsv = async (file) => {
+    const reader = new FileReader();
+
+    reader.onload = async () => {
+      try {
+        const text = String(reader.result || "").replace(/\uFEFF/g, "");
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (lines.length < 2) {
+          setMessage("CSV me data nahi mila.");
+          return;
+        }
+
+        const rawHeaders = parseCsvLine(lines[0]).map((s) => s.replaceAll('"', "").trim());
+        const headersNorm = rawHeaders.map((h) => h.trim().toLowerCase());
+        const findCol = (...names) => headersNorm.findIndex((h) => names.includes(h));
+
+        const idxWeekKey = findCol("week_key", "weekkey");
+        const idxWeekStart = findCol("week_start", "weekstart");
+        const idxWeekEnd = findCol("week_end", "weekend");
+        const idxName = findCol("name", "operator name");
+        const idxCode = findCol("code");
+        const idxDesignation = findCol("designation");
+        const idxWeekOff = findCol("weekoff", "week_off", "weakoff");
+        const idxShift = findCol("shift");
+        const idxHallName = findCol("hallname", "hall_name", "hall");
+
+        const normalizeText = (val) => String(val || "").trim().toLowerCase().replace(/\s+/g, " ");
+        const hallsLookup = halls.map((h) => ({
+          ...h,
+          _normName: normalizeText(h.name),
+          _normId: normalizeText(h.id),
+        }));
+
+        const findHall = (rawHallName) => {
+          const key = normalizeText(rawHallName);
+          return (
+            hallsLookup.find((h) => h._normName === key) ||
+            hallsLookup.find((h) => h._normId === key) ||
+            hallsLookup.find((h) => h._normName.includes(key) || key.includes(h._normName)) ||
+            null
+          );
+        };
+
+        const rosterToImport = [];
+        const newHallsToAdd = [];
+        let firstWeekKey = weekKey;
+        let firstWeekStart = "";
+        let firstWeekEnd = "";
+
+        for (const line of lines.slice(1)) {
+          const cols = parseCsvLine(line);
+          if (!cols.length) continue;
+
+          const get = (idx) => (idx >= 0 ? String(cols[idx] ?? "").trim() : "");
+          const rowWeekKey = get(idxWeekKey) || weekKey;
+          const rowWeekStart = get(idxWeekStart);
+          const rowWeekEnd = get(idxWeekEnd);
+          const name = get(idxName);
+          const code = get(idxCode);
+          const designation = get(idxDesignation);
+          const weekOff = get(idxWeekOff) || "Sunday";
+          const shift = get(idxShift) || "A";
+          const hallNameRaw = get(idxHallName);
+
+          if (!firstWeekStart && rowWeekStart) firstWeekStart = rowWeekStart;
+          if (!firstWeekEnd && rowWeekEnd) firstWeekEnd = rowWeekEnd;
+          if (rowWeekKey && firstWeekKey === weekKey) firstWeekKey = rowWeekKey;
+
+          let hall = findHall(hallNameRaw);
+
+          if (!hall) {
+            const hallName =
+              String(hallNameRaw || "").trim() ||
+              `Hall ${halls.length + newHallsToAdd.length + 1}`;
+            const tempId = `temp-${hallName.toLowerCase().replace(/\s+/g, "-")}`;
+            hall = { id: tempId, name: hallName, capacity: 50, color: "blue" };
+
+            const alreadyQueued = newHallsToAdd.some(
+              (h) => normalizeText(h.name) === normalizeText(hall.name)
+            );
+            if (!alreadyQueued) newHallsToAdd.push(hall);
+          }
+
+          if (!name || !code) continue;
+
+          rosterToImport.push({
+            code,
+            name,
+            designation,
+            week_off: weekOff,
+            shift,
+            hall_id: hall.id,
+            hall_name: hall.name,
+            week_key: rowWeekKey,
+            week_start: rowWeekStart || "",
+            week_end: rowWeekEnd || "",
+          });
+        }
+
+        if (!Array.isArray(rosterToImport) || rosterToImport.length === 0) {
+          setMessage("CSV me valid roster rows nahi mile.");
+          return;
+        }
+
+        setLoading(true);
+
+        const currentHalls = [...halls];
+        for (const hall of newHallsToAdd) {
+          try {
+            const res = await hrApi.addHall({
+              name: hall.name,
+              capacity: hall.capacity,
+              color: hall.color,
+            });
+            if (res.success && res.data) currentHalls.push(res.data);
+            else currentHalls.push(hall);
+          } catch {
+            currentHalls.push(hall);
+          }
+        }
+
+        setState((prev) => ({
+          ...prev,
+          halls: currentHalls,
+        }));
+
+        const payload = {
+          week_key: firstWeekKey || weekKey,
+          week_start: firstWeekStart || weekInfo.weekStart,
+          week_end: firstWeekEnd || weekInfo.weekEnd,
+          employees: rosterToImport,
+        };
+
+        const response = await hrApi.bulkImportRoster(payload);
+
+        if (response.success) {
+          setMessage(
+            `✅ ${response.data?.imported || rosterToImport.length} roster rows imported for ${firstWeekKey || weekKey}!`
+          );
+          await refreshRoster(firstWeekKey || weekKey);
+        } else {
+          setMessage("CSV import failed: " + (response.error || "Failed"));
+        }
+      } catch (error) {
+        setMessage("CSV import failed: " + error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    reader.readAsText(file);
+  };
+
+  const importPreviousWeek = async () => {
+    if (!sourceWeekKey.trim()) {
+      setMessage("Source week key required hai.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await hrApi.importRosterFromWeek({
+        week_key: weekKey,
+        source_week_key: sourceWeekKey.trim(),
+      });
+
+      if (response.success) {
+        setMessage(`✅ ${sourceWeekKey} se ${weekKey} me roster copied.`);
+        await refreshRoster(weekKey);
+      } else {
+        setMessage("Import failed: " + (response.error || "Failed"));
+      }
+    } catch (error) {
+      setMessage("Import failed: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetFilters = () => setFilters({ hallId: "", shift: "", weekOff: "", designation: "" });
 
   return (
     <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
@@ -386,6 +613,7 @@ export default function RosterManager() {
             <h2 className="text-lg font-bold text-white">Roster Manager</h2>
             <p className="mt-0.5 text-xs text-white/70">Weekly roster master</p>
           </div>
+
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -410,31 +638,111 @@ export default function RosterManager() {
       <div className="grid gap-0 md:grid-cols-[270px_1fr]">
         <aside className="hidden border-r border-slate-300 p-3 md:block">
           <div className="space-y-3">
-            <Field label="Week Key" value={form.weekKey} onChange={(e) => { const value = e.target.value; setForm((p) => ({ ...p, weekKey: value })); setWeekKey(value); }} />
-            <Field label="Week Start" value={form.weekStart} onChange={(e) => setForm((p) => ({ ...p, weekStart: e.target.value }))} />
-            <Field label="Week End" value={form.weekEnd} onChange={(e) => setForm((p) => ({ ...p, weekEnd: e.target.value }))} />
-            <Field label="Copy From" placeholder="2026-W25" value={sourceWeekKey} onChange={(e) => setSourceWeekKey(e.target.value)} />
-            <Field label="Search" placeholder="Search roster" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <button
-              type="button"
-              className="h-9 w-full rounded-xl bg-[#23205C] px-3 text-sm font-semibold text-white"
-              onClick={() => hrApi.importRosterFromWeek({ week_key: weekKey, source_week_key: sourceWeekKey.trim() })}
-            >
-              <Copy className="mr-1 inline h-4 w-4" />
-              Copy
-            </button>
+            <Field
+              label="Week Key"
+              value={form.weekKey}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((p) => ({ ...p, weekKey: value }));
+                setWeekKey(value);
+              }}
+              placeholder="2026-W26"
+            />
+            <Field
+              label="Week Start"
+              value={form.weekStart}
+              onChange={(e) => setForm((p) => ({ ...p, weekStart: e.target.value }))}
+              placeholder="2026-06-22"
+            />
+            <Field
+              label="Week End"
+              value={form.weekEnd}
+              onChange={(e) => setForm((p) => ({ ...p, weekEnd: e.target.value }))}
+              placeholder="2026-06-28"
+            />
+            <Field
+              label="Copy From"
+              placeholder="2026-W25"
+              value={sourceWeekKey}
+              onChange={(e) => setSourceWeekKey(e.target.value)}
+            />
+
+            <div className="grid grid-cols-2 gap-2">
+              <SelectField
+                label="Hall"
+                value={filters.hallId}
+                onChange={(e) =>
+                  setFilters((p) => ({ ...p, hallId: e.target.value }))
+                }
+              >
+                <option value="">All Halls</option>
+                {halls.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name}
+                  </option>
+                ))}
+              </SelectField>
+
+              <SelectField
+                label="Shift"
+                value={filters.shift}
+                onChange={(e) =>
+                  setFilters((p) => ({ ...p, shift: e.target.value }))
+                }
+              >
+                <option value="">All</option>
+                {["A", "B", "C", "AA", "BB", "G"].map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </SelectField>
+            </div>
+
+            <Field
+              label="Search"
+              placeholder="Search roster"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"
+                onClick={resetFilters}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className="h-9 rounded-xl bg-[#23205C] px-3 text-sm font-semibold text-white"
+                onClick={importPreviousWeek}
+                disabled={loading}
+              >
+                <Copy className="mr-1 inline h-4 w-4" />
+                Copy
+              </button>
+            </div>
+
             <label className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700">
               <FileUp className="h-4 w-4" />
               Import CSV
-              <input type="file" accept=".csv,text/csv" className="hidden" />
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])}
+              />
             </label>
+
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600 break-words">
               <div className="flex items-center gap-2 font-semibold text-slate-800">
                 <HelpCircle className="h-4 w-4" />
                 CSV Headers
               </div>
               <code className="mt-2 block rounded bg-white px-2 py-1 text-[11px] whitespace-normal break-words">
-                {headers.join(",")}
+                week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
               </code>
             </div>
           </div>
@@ -442,10 +750,29 @@ export default function RosterManager() {
 
         <main className="p-3 md:p-4 min-w-0">
           <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
-            <Field label="Name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-            <Field label="Code" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
-            <Field label="Designation" value={form.designation} onChange={(e) => setForm((p) => ({ ...p, designation: e.target.value }))} />
-            <SelectField label="Shift" value={form.shift} onChange={(e) => setForm((p) => ({ ...p, shift: e.target.value }))}>
+            <Field
+              label="Name"
+              placeholder="Enter name"
+              value={form.name}
+              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+            />
+            <Field
+              label="Code"
+              placeholder="Enter code"
+              value={form.code}
+              onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))}
+            />
+            <Field
+              label="Designation"
+              placeholder="Operator"
+              value={form.designation}
+              onChange={(e) => setForm((p) => ({ ...p, designation: e.target.value }))}
+            />
+            <SelectField
+              label="Shift"
+              value={form.shift}
+              onChange={(e) => setForm((p) => ({ ...p, shift: e.target.value }))}
+            >
               {["A", "B", "C", "AA", "BB", "G"].map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -453,12 +780,18 @@ export default function RosterManager() {
               ))}
             </SelectField>
 
-            <SelectField label="Week Off" value={form.weekOff} onChange={(e) => setForm((p) => ({ ...p, weekOff: e.target.value }))}>
-              {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
+            <SelectField
+              label="Week Off"
+              value={form.weekOff}
+              onChange={(e) => setForm((p) => ({ ...p, weekOff: e.target.value }))}
+            >
+              {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map(
+                (d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                )
+              )}
             </SelectField>
 
             <SelectField
@@ -481,9 +814,28 @@ export default function RosterManager() {
               ))}
             </SelectField>
 
-            <Field label="Week Key" value={form.weekKey} onChange={(e) => { const value = e.target.value; setForm((p) => ({ ...p, weekKey: value })); setWeekKey(value); }} />
-            <Field label="Week Start" value={form.weekStart} onChange={(e) => setForm((p) => ({ ...p, weekStart: e.target.value }))} />
-            <Field label="Week End" value={form.weekEnd} onChange={(e) => setForm((p) => ({ ...p, weekEnd: e.target.value }))} />
+            <Field
+              label="Week Key"
+              placeholder="2026-W26"
+              value={form.weekKey}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((p) => ({ ...p, weekKey: value }));
+                setWeekKey(value);
+              }}
+            />
+            <Field
+              label="Week Start"
+              placeholder="2026-06-22"
+              value={form.weekStart}
+              onChange={(e) => setForm((p) => ({ ...p, weekStart: e.target.value }))}
+            />
+            <Field
+              label="Week End"
+              placeholder="2026-06-28"
+              value={form.weekEnd}
+              onChange={(e) => setForm((p) => ({ ...p, weekEnd: e.target.value }))}
+            />
 
             <div className="flex items-end gap-2 xl:col-span-4">
               <button
@@ -492,7 +844,11 @@ export default function RosterManager() {
                 onClick={upsertEmp}
                 disabled={loading}
               >
-                {editingId ? <Save className="mr-1 inline h-4 w-4" /> : <Plus className="mr-1 inline h-4 w-4" />}
+                {editingId ? (
+                  <Save className="mr-1 inline h-4 w-4" />
+                ) : (
+                  <Plus className="mr-1 inline h-4 w-4" />
+                )}
                 {editingId ? "Update Row" : "Add Row"}
               </button>
               <button
@@ -502,15 +858,6 @@ export default function RosterManager() {
               >
                 <X className="mr-1 inline h-4 w-4" />
                 Reset
-              </button>
-              <button
-                className="h-9 rounded-xl border border-[#E0222A] bg-[#E0222A]/10 px-3 text-sm font-semibold text-[#E0222A]"
-                type="button"
-                onClick={deleteSelectedEmployees}
-                disabled={loading}
-              >
-                <Trash2 className="mr-1 inline h-4 w-4" />
-                Delete Selected
               </button>
             </div>
           </div>
@@ -570,12 +917,12 @@ export default function RosterManager() {
                         <td className="px-2 py-2 text-xs text-slate-700">{r.week_key || "-"}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.week_start || "-"}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.week_end || "-"}</td>
-                        <td className="px-2 py-2 text-xs font-bold text-slate-900">{r.name || "-"}</td>
-                        <td className="px-2 py-2 text-xs text-slate-700">{r.code || "-"}</td>
+                        <td className="px-2 py-2 text-xs font-bold text-slate-900">{r.name}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.code}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.designation || "-"}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.hallName || "-"}</td>
-                        <td className="px-2 py-2 text-xs text-slate-700">{r.shift || "-"}</td>
-                        <td className="px-2 py-2 text-xs text-slate-700">{r.weekOff || "-"}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.shift}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.weekOff}</td>
                         <td className="px-2 py-2 text-xs">
                           <div className="flex gap-2">
                             <button
@@ -610,6 +957,26 @@ export default function RosterManager() {
         </main>
       </div>
 
+      {isFilterOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setIsFilterOpen(false)} />
+          <div className="absolute right-0 top-0 h-full w-[92%] max-w-sm overflow-y-auto bg-white p-4 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Filters</h3>
+              <button type="button" onClick={() => setIsFilterOpen(false)}>
+                <X className="h-5 w-5 text-slate-700" />
+              </button>
+            </div>
+            <Field
+              label="Search"
+              placeholder="Search roster"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
       {isHelpOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="relative w-full max-w-2xl rounded-xl bg-white p-5 shadow-2xl">
@@ -620,13 +987,16 @@ export default function RosterManager() {
             >
               <X className="h-5 w-5" />
             </button>
+
             <h3 className="text-lg font-bold text-slate-900">CSV Import Help</h3>
             <p className="mt-2 text-sm text-slate-600">
               Excel me first row headers exactly ye honi chahiye:
             </p>
+
             <code className="mt-3 block break-words whitespace-normal rounded bg-slate-100 px-3 py-2 text-xs">
               week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
             </code>
+
             <p className="mt-4 text-sm text-slate-600">Example row:</p>
             <code className="mt-2 block break-words whitespace-normal rounded bg-slate-100 px-3 py-2 text-xs">
               2026-W26,2026-06-22,2026-06-28,KHUSH RAVI,165990,OPERATOR,Monday,AA,Hall 1
