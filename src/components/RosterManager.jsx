@@ -908,6 +908,7 @@ export default function RosterManager() {
                         <td className="px-2 py-2 text-xs text-slate-700">{r.week_key || "-"}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.week_start || "-"}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.week_end || "-"}</td>
+                        
                         <td className="px-2 py-2 text-xs font-bold text-slate-900">{r.name}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.code}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.designation || "-"}</td>

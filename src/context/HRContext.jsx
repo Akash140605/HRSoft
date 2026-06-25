@@ -123,11 +123,8 @@ const getArray = (data) => {
 };
 
 export function HRProvider({ children }) {
-  const [state, setState] = useState(() => {
-    if (typeof window === "undefined") return createInitialState();
-    const saved = safeParse(localStorage.getItem(STORAGE_KEY), null);
-    return saved ? { ...createInitialState(), ...saved } : createInitialState();
-  });
+const [state, setState] = useState(createInitialState());
+  
 
   const updateState = useCallback((updater) => {
     setState((prev) =>
@@ -150,7 +147,7 @@ export function HRProvider({ children }) {
         hrApi.getEntries(),
         hrApi.getLogs(),
         hrApi.getAllAttendance(),
-        hrApi.getRoster(),
+      hrApi.getRoster(currentWeekKey()),
       ]);
       const rosterRaw = rosterRes?.success
         ? getArray(rosterRes.data ?? rosterRes)
@@ -226,12 +223,12 @@ console.log("ROSTER COUNT =", rosterRaw.length);
     fetchAllDataFromAPI();
   }, [fetchAllDataFromAPI]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
-  }, [state]);
+  // useEffect(() => {
+  //   if (typeof window === "undefined") return;
+  //   try {
+  //     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  //   } catch {}
+  // }, [state]);
 
   const resetAll = useCallback(() => {
     const fresh = createInitialState();
