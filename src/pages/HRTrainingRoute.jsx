@@ -1,14 +1,6 @@
-// src/pages/HRTrainingRoute.jsx
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
-  ArrowRight,
   Building2,
   CheckCircle2,
   ChevronLeft,
@@ -32,13 +24,20 @@ import {
   Users2,
   Home,
   Loader2,
+  X,
+  Copy,
+  Search,
+  Camera,
+  CircleAlert,
 } from "lucide-react";
 
-const AUTO_SLIDE_MS = 14000;
-const TYPE_SPEED_FAST = 20;
-const TYPE_SPEED_SLOW = 42;
-const TYPE_DELAY = 90;
-const LOGIN_DELAY = 1200;
+const AUTOSLIDEMS = 14000;
+const TYPESPEEDFAST = 20;
+const TYPESPEEDSLOW = 42;
+const TYPEDELAY = 90;
+const LOGINDELAY = 1200;
+
+const cx = (...classes) => classes.filter(Boolean).join(" ");
 
 const roleAccess = {
   USER: {
@@ -75,14 +74,7 @@ const roleAccess = {
     afterTitle: "Admin ke baad kya dikhega",
     afterDesc:
       "Admin login ke baad full module visibility, hall summary, role overview, roster data, attendance insight, aur system level control cards dikhenge.",
-    modules: [
-      "Scanner",
-      "Entries",
-      "Roster",
-      "Hall",
-      "Role Summary",
-      "System Control",
-    ],
+    modules: ["Scanner", "Entries", "Roster", "Hall", "Role Summary", "System Control"],
     badge: "Full Access",
     color: "border-[#E0222A] bg-white text-[#E0222A]",
     accent: "from-[#E0222A] via-[#ff5470] to-[#23205C]",
@@ -94,7 +86,7 @@ const roleAccess = {
     subtitle: "Visitor, approval, and workflow access",
     afterTitle: "EVAPS ke baad kya dikhega",
     afterDesc:
-      "EVAPS login ke baad approval cards, visitor tracking, status checks, aur workflow timeline dikhega. Ye flow intentionally simpler aur guided hai.",
+      "EVAPS login ke baad approval cards, visitor tracking, status checks, aur workflow timeline dikhega.",
     modules: ["Approvals", "Visitor Flow", "Status", "Timeline"],
     badge: "Workflow Access",
     color: "border-emerald-300 bg-white text-emerald-700",
@@ -132,15 +124,26 @@ const hallCards = [
   { name: "Hall 4", used: 6, total: 85, shift: "A0 B4 AA1 BB1" },
 ];
 
-const cx = (...classes) => classes.filter(Boolean).join(" ");
+function beep() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.value = 0.05;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    setTimeout(() => {
+      osc.stop();
+      ctx.close();
+    }, 120);
+  } catch {}
+}
 
-function TypewriterText({
-  text,
-  speed = TYPE_SPEED_FAST,
-  delay = 0,
-  className = "",
-  as: Tag = "div",
-}) {
+function TypewriterText({ text, speed = TYPESPEEDFAST, delay = 0, className = "", as: Tag = "div" }) {
   const [displayed, setDisplayed] = useState("");
   useEffect(() => {
     let timeoutId;
@@ -174,9 +177,7 @@ function StatCard({ label, value, icon: Icon }) {
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <div className="mt-2 text-2xl font-black tracking-tight text-slate-900">
-        {value}
-      </div>
+      <div className="mt-2 text-2xl font-black tracking-tight text-slate-900">{value}</div>
     </div>
   );
 }
@@ -186,9 +187,7 @@ function MiniBadge({ children, active = false }) {
     <span
       className={cx(
         "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold",
-        active
-          ? "border-[#23205C] bg-[#23205C] text-white"
-          : "border-slate-200 bg-white text-slate-700"
+        active ? "border-[#23205C] bg-[#23205C] text-white" : "border-slate-200 bg-white text-slate-700"
       )}
     >
       {children}
@@ -197,8 +196,7 @@ function MiniBadge({ children, active = false }) {
 }
 
 function AnimatedMascot({ role = "HR" }) {
-  const face =
-    role === "ADMIN" ? "🤖" : role === "EVAPS" ? "🧭" : role === "USER" ? "👟" : "🧑‍💼";
+  const face = role === "ADMIN" ? "🛡️" : role === "EVAPS" ? "✨" : role === "USER" ? "👤" : "🧭";
   const bg =
     role === "ADMIN"
       ? "from-[#E0222A] to-[#23205C]"
@@ -208,9 +206,7 @@ function AnimatedMascot({ role = "HR" }) {
       ? "from-slate-900 to-slate-700"
       : "from-[#23205C] to-[#E0222A]";
   return (
-    <div
-      className={`relative mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br shadow-lg ${bg} animate-[float_2.8s_ease-in-out_infinite]`}
-    >
+    <div className={cx("relative mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br shadow-lg animate-[float_2.8s_ease-in-out_infinite]", bg)}>
       <div className="absolute inset-2 rounded-full bg-white/15 backdrop-blur-sm" />
       <div className="absolute bottom-2 left-3 h-3 w-3 rounded-full bg-white/90" />
       <div className="absolute bottom-2 right-3 h-3 w-3 rounded-full bg-white/90" />
@@ -224,7 +220,7 @@ function RolePreview({ role }) {
   const info = roleAccess[role];
   return (
     <div className="overflow-hidden rounded-3xl border-2 border-slate-200 bg-white shadow-sm">
-      <div className={`bg-gradient-to-r px-5 py-4 text-white ${info.accent}`}>
+      <div className={cx("bg-gradient-to-r px-5 py-4 text-white", info.accent)}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/70">
@@ -232,9 +228,7 @@ function RolePreview({ role }) {
             </div>
             <div className="mt-1 text-xl font-black">{info.afterTitle}</div>
           </div>
-          <div
-            className={`rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${info.color}`}
-          >
+          <div className={cx("rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]", info.color)}>
             {info.badge}
           </div>
         </div>
@@ -243,10 +237,7 @@ function RolePreview({ role }) {
         <p className="text-sm leading-6 text-slate-600">{info.afterDesc}</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           {info.modules.map((item) => (
-            <div
-              key={item}
-              className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700"
-            >
+            <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700">
               {item}
             </div>
           ))}
@@ -258,18 +249,7 @@ function RolePreview({ role }) {
 
 function ConsoleLine({ text, tone = "default" }) {
   return (
-    <div
-      className={cx(
-        "flex items-start gap-2 text-[12px] leading-5 md:text-[13px]",
-        tone === "success"
-          ? "text-emerald-400"
-          : tone === "error"
-          ? "text-red-400"
-          : tone === "muted"
-          ? "text-slate-400"
-          : "text-slate-100"
-      )}
-    >
+    <div className={cx("flex items-start gap-2 text-[12px] leading-5 md:text-[13px]", tone === "success" ? "text-emerald-400" : tone === "error" ? "text-red-400" : tone === "muted" ? "text-slate-400" : "text-slate-100")}>
       <span className="mt-[2px] shrink-0 text-slate-500">&gt;</span>
       <span>{text}</span>
     </div>
@@ -297,6 +277,186 @@ function ConsoleWindow({ title, lines }) {
   );
 }
 
+function ScannerPanel({ role }) {
+  const [code, setCode] = useState("");
+  const [status, setStatus] = useState("Waiting for scan...");
+  const [lastResult, setLastResult] = useState("");
+  const [logs, setLogs] = useState([]);
+  const [manualMode, setManualMode] = useState(false);
+
+  const scanRef = useRef(null);
+
+  const addLog = (text, tone = "default") =>
+    setLogs((prev) => [...prev, { id: `${Date.now()}-${Math.random()}`, text, tone }]);
+
+  const processCode = (input) => {
+    const value = String(input || "").trim();
+    if (!value) return;
+    beep();
+    setStatus("Beep! Scan received.");
+    setLastResult(value);
+    addLog(`Scanned code: ${value}`, "success");
+    addLog("Verification completed successfully.", "default");
+    setCode("");
+    setTimeout(() => setStatus("Ready for next scan"), 500);
+  };
+
+  useEffect(() => {
+    scanRef.current?.focus();
+  }, [role]);
+
+  return (
+    <div className="overflow-hidden rounded-3xl border-2 border-[#23205C] bg-white shadow-sm">
+      <div className="border-b border-slate-200 bg-gradient-to-r from-[#23205C] to-[#342f73] px-5 py-4 text-white">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/70">Scanner Panel</div>
+            <h3 className="mt-1 text-2xl font-black">Attendance Scanner</h3>
+            <p className="mt-1 text-sm text-white/80">Code scan karo ya manual entry se verify karo.</p>
+          </div>
+          <div className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold">
+            Role: {role}
+          </div>
+        </div>
+      </div>
+
+      <div className="p-5">
+        <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-bold text-slate-900">Scanner / Manual Entry</div>
+              <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+                <CircleAlert className="h-3.5 w-3.5 text-emerald-600" />
+                {status}
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <div className="relative flex-1">
+                <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  ref={scanRef}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") processCode(code);
+                  }}
+                  placeholder="Scan or type code"
+                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 pl-9 text-sm outline-none focus:border-[#23205C] focus:ring-4 focus:ring-[#23205C]/10"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.readText?.().then((t) => {
+                    if (t) setCode(t.trim());
+                  }).catch(() => {});
+                }}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-700 hover:bg-slate-50"
+                title="Paste / Copy helper"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setManualMode((p) => !p)}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                {manualMode ? "Hide Manual Mode" : "Manual Mode"}
+              </button>
+              <button
+                type="button"
+                onClick={() => processCode(code)}
+                className="rounded-2xl bg-[#E0222A] px-4 py-3 text-sm font-bold text-white hover:bg-[#c91b22]"
+              >
+                Process Entry
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  beep();
+                  setStatus("Camera scan simulated");
+                  addLog("Camera scan triggered.", "muted");
+                }}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Camera className="mr-1 inline h-4 w-4" />
+                Camera Scan
+              </button>
+            </div>
+
+            {manualMode && (
+              <div className="mt-4 grid gap-3 rounded-2xl border border-dashed border-slate-300 bg-white p-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <input
+                    placeholder="Employee name"
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-[#23205C]"
+                  />
+                  <input
+                    placeholder="Department / Designation"
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-[#23205C]"
+                  />
+                </div>
+                <button className="rounded-2xl bg-[#23205C] px-4 py-3 text-sm font-bold text-white">
+                  Verify Manually
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-bold text-slate-900">Scanner Feedback</div>
+              <div className="text-xs text-slate-500">Live updates</div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Role</div>
+                <div className="mt-1 text-lg font-black text-slate-900">{role}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status</div>
+                <div className="mt-1 text-lg font-black text-emerald-600">Open</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Last Scan</div>
+                <div className="mt-1 text-lg font-black text-slate-900">{lastResult || "-"}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-950 p-4 font-mono text-xs text-slate-100">
+              {logs.length ? (
+                logs.slice(-8).map((l) => (
+                  <div key={l.id} className="mb-2">
+                    <span className="text-slate-400">&gt; </span>
+                    <span
+                      className={
+                        l.tone === "success"
+                          ? "text-emerald-400"
+                          : l.tone === "error"
+                          ? "text-red-400"
+                          : "text-slate-100"
+                      }
+                    >
+                      {l.text}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-slate-400">No scan logs yet.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UserDashboard() {
   return (
     <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
@@ -306,43 +466,19 @@ function UserDashboard() {
           <StatCard label="Access" value="Self" icon={ShieldCheck} />
           <StatCard label="Panel" value="Scan" icon={ScanLine} />
         </div>
-        <div className="overflow-hidden rounded-3xl border-2 border-slate-200 bg-white p-5 shadow-sm">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-            User scanner panel
-          </div>
-          <h3 className="mt-2 text-2xl font-black text-slate-900">
-            Self Attendance Screen
-          </h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            User login ke baad employee apna code enter karega, verify button
-            dekhega, aur apni last attendance status check karega.
-          </p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <input
-              defaultValue="491676"
-              className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#23205C] focus:ring-4 focus:ring-[#23205C]/10"
-            />
-            <button className="inline-flex items-center justify-center rounded-2xl bg-[#23205C] px-4 py-3 text-sm font-bold text-white transition hover:scale-[1.01] hover:bg-[#2f2a71]">
-              Verify Attendance
-            </button>
-          </div>
-        </div>
+        <ScannerPanel role="USER" />
       </div>
+
       <div className="overflow-hidden rounded-3xl border-2 border-slate-200 bg-white p-5 shadow-sm">
         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
           User ko kya dikhega
         </div>
         <div className="mt-3 space-y-3">
-          {["Self Scanner", "My Attendance Status", "Basic Access Only"].map(
-            (x) => (
-              <div
-                key={x}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"
-              >
-                {x}
-              </div>
-            )
-          )}
+          {["Self Scanner", "My Attendance Status", "Basic Access Only"].map((x) => (
+            <div key={x} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+              {x}
+            </div>
+          ))}
         </div>
         <div className="mt-5">
           <AnimatedMascot role="USER" />
@@ -351,6 +487,7 @@ function UserDashboard() {
     </div>
   );
 }
+
 function HREntriesDashboard() {
   return (
     <div className="space-y-4">
@@ -365,9 +502,7 @@ function HREntriesDashboard() {
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Scanner visible after HR login
           </div>
-          <div className="mt-2 text-lg font-black text-slate-900">
-            HR Scanner
-          </div>
+          <div className="mt-2 text-lg font-black text-slate-900">HR Scanner</div>
           <div className="mt-4 flex items-center justify-center">
             <AnimatedMascot role="HR" />
           </div>
@@ -381,21 +516,20 @@ function HREntriesDashboard() {
             </button>
           </div>
         </div>
+
         <div className="overflow-hidden rounded-3xl border-2 border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Entries visible after HR login
           </div>
           <div className="mt-3 space-y-2">
             {entryRows.slice(0, 3).map((r) => (
-              <div
-                key={r.join("-")}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
-              >
-                {r.join(" | ")}
+              <div key={r.join("-")} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                {r.join("  •  ")}
               </div>
             ))}
           </div>
         </div>
+
         <div className="overflow-hidden rounded-3xl border-2 border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Hall move visible after HR login
@@ -406,10 +540,9 @@ function HREntriesDashboard() {
               className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
             />
             <select className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10">
-              <option>Hall 1</option>
-              <option>Hall 2</option>
-              <option>Hall 3</option>
-              <option>Hall 4</option>
+              {["Hall 1", "Hall 2", "Hall 3", "Hall 4"].map((h) => (
+                <option key={h}>{h}</option>
+              ))}
             </select>
             <button className="rounded-2xl bg-[#E0222A] px-4 py-3 text-sm font-bold text-white transition hover:scale-[1.01]">
               Move Hall
@@ -430,48 +563,35 @@ function HRRosterDashboard() {
         <StatCard label="Mode" value="Roster" icon={Database} />
         <StatCard label="Access" value="HR" icon={ShieldCheck} />
       </div>
+
       <div className="overflow-hidden rounded-3xl border-2 border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
               Roster visible after HR login
             </div>
-            <div className="mt-1 text-lg font-black text-slate-900">
-              Roster Manager
-            </div>
+            <div className="mt-1 text-lg font-black text-slate-900">Roster Manager</div>
           </div>
           <div className="flex gap-2">
-            <button className="rounded-xl border border-slate-300 px-3 py-2 text-xs transition hover:bg-slate-50">
-              CSV
-            </button>
-            <button className="rounded-xl border border-slate-300 px-3 py-2 text-xs transition hover:bg-slate-50">
-              Excel
-            </button>
+            <button className="rounded-xl border border-slate-300 px-3 py-2 text-xs transition hover:bg-slate-50">CSV</button>
+            <button className="rounded-xl border border-slate-300 px-3 py-2 text-xs transition hover:bg-slate-50">Excel</button>
           </div>
         </div>
+
         <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
           <table className="min-w-full text-left text-xs">
             <thead>
               <tr className="border-b bg-slate-50 text-slate-500">
-                {["Name", "Code", "Designation", "Hall", "Shift", "Week Off"].map(
-                  (h) => (
-                    <th key={h} className="px-3 py-3">
-                      {h}
-                    </th>
-                  )
-                )}
+                {["Name", "Code", "Designation", "Hall", "Shift", "Week Off"].map((h) => (
+                  <th key={h} className="px-3 py-3">{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {rosterRows.map((r) => (
                 <tr key={r[1]} className="border-b last:border-0">
                   {r.map((cell, i) => (
-                    <td
-                      key={i}
-                      className={cx("px-3 py-3", i === 0 && "font-semibold")}
-                    >
-                      {cell}
-                    </td>
+                    <td key={i} className={cx("px-3 py-3", i === 0 && "font-semibold")}>{cell}</td>
                   ))}
                 </tr>
               ))}
@@ -492,27 +612,16 @@ function AdminDashboard() {
         <StatCard label="Users" value="389" icon={Users2} />
         <StatCard label="Halls" value="4" icon={Building2} />
       </div>
+
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="overflow-hidden rounded-3xl border-2 border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Admin ko kya dikhega
           </div>
-          <div className="mt-2 text-lg font-black text-slate-900">
-            All role summaries and modules
-          </div>
+          <div className="mt-2 text-lg font-black text-slate-900">All role summaries and modules</div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {[
-              "Scanner",
-              "Entries",
-              "Roster",
-              "Hall Manager",
-              "Role Visibility",
-              "System Summary",
-            ].map((x) => (
-              <div
-                key={x}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700"
-              >
+            {["Scanner", "Entries", "Roster", "Hall Manager", "Role Visibility", "System Summary"].map((x) => (
+              <div key={x} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700">
                 {x}
               </div>
             ))}
@@ -521,20 +630,16 @@ function AdminDashboard() {
             <AnimatedMascot role="ADMIN" />
           </div>
         </div>
+
         <div className="overflow-hidden rounded-3xl border-2 border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Hall summary visible after Admin login
           </div>
           <div className="mt-3 space-y-2">
             {hallCards.map((h) => (
-              <div
-                key={h.name}
-                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
-              >
+              <div key={h.name} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
                 <span className="font-semibold">{h.name}</span>
-                <span>
-                  {h.used}/{h.total}
-                </span>
+                <span>{h.used}/{h.total} • {h.shift}</span>
               </div>
             ))}
           </div>
@@ -553,17 +658,15 @@ function EVAPSFlow() {
         <StatCard label="Status" value="Live" icon={CheckCircle2} />
         <StatCard label="Flow" value="Guided" icon={Keyboard} />
       </div>
+
       <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="overflow-hidden rounded-3xl border-2 border-emerald-200 bg-white p-5 shadow-sm">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-600">
             EVAPS option added
           </div>
-          <h3 className="mt-2 text-2xl font-black text-slate-900">
-            Approval and visitor workflow
-          </h3>
+          <h3 className="mt-2 text-2xl font-black text-slate-900">Approval and visitor workflow</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Yahan approvals, visitor tracking, aur status timeline clean animated
-            cards ke through show hoga.
+            Yahan approvals, visitor tracking, aur status timeline clean animated cards ke through show hoga.
           </p>
           <div className="mt-5 grid gap-3">
             {[
@@ -571,24 +674,23 @@ function EVAPSFlow() {
               ["Visitor Flow", "Simple guided step-by-step movement."],
               ["Status Timeline", "Live updates with motion cards."],
             ].map(([a, b]) => (
-              <div
-                key={a}
-                className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-4"
-              >
+              <div key={a} className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-4">
                 <div className="font-semibold text-slate-900">{a}</div>
                 <div className="mt-1 text-sm text-slate-600">{b}</div>
               </div>
             ))}
           </div>
+          <div className="mt-5 flex items-center justify-center">
+            <AnimatedMascot role="EVAPS" />
+          </div>
         </div>
+
         <div className="overflow-hidden rounded-3xl border-2 border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Animated walkthrough
           </div>
           <div className="mt-4 flex items-center gap-4 overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white px-5 py-6">
-            <div className="animate-[float_2.8s_ease-in-out_infinite] text-4xl">
-              🚶
-            </div>
+            <div className="animate-[float_2.8s_ease-in-out_infinite] text-4xl">🚀</div>
             <div className="flex-1">
               <div className="h-2 overflow-hidden rounded-full bg-slate-200">
                 <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-slate-900" />
@@ -600,12 +702,7 @@ function EVAPSFlow() {
                 <MiniBadge>Finish</MiniBadge>
               </div>
             </div>
-            <div className="animate-[float_2.8s_ease-in-out_infinite] text-4xl">
-              📋
-            </div>
-          </div>
-          <div className="mt-5 flex items-center justify-center">
-            <AnimatedMascot role="EVAPS" />
+            <div className="animate-[float_2.8s_ease-in-out_infinite] text-4xl">✨</div>
           </div>
         </div>
       </div>
@@ -641,13 +738,13 @@ function LoginAccessPanel({
 
           <TypewriterText
             text="Role Based Login Flow"
-            speed={TYPE_SPEED_SLOW}
+            speed={TYPESPEEDSLOW}
             className="text-[38px] font-black leading-[1.05] tracking-tight text-[#241d72] xl:text-[52px]"
           />
           <TypewriterText
             text="Role select karne ke baad pehle ID auto-fill hoti hai. Enter dabane par cursor password field me shift hota hai."
-            speed={TYPE_SPEED_FAST}
-            delay={TYPE_DELAY}
+            speed={TYPESPEEDFAST}
+            delay={TYPEDELAY}
             className="mt-3 max-w-3xl text-[15px] leading-6 text-slate-600"
           />
 
@@ -663,26 +760,13 @@ function LoginAccessPanel({
                 }}
                 className={cx(
                   "rounded-2xl border-2 px-4 py-3 text-left transition duration-300 hover:-translate-y-0.5",
-                  role === item
-                    ? roleAccess[item].color + " shadow-md"
-                    : "border-slate-300 bg-white text-slate-800"
+                  role === item ? roleAccess[item].color + " shadow-md" : "border-slate-300 bg-white text-slate-800"
                 )}
               >
                 <div className="text-[18px] font-black">
-                  {item === "USER"
-                    ? "User"
-                    : item === "HR"
-                    ? "HR"
-                    : item === "ADMIN"
-                    ? "Admin"
-                    : "EVAPS"}
+                  {item === "USER" ? "User" : item === "HR" ? "HR" : item === "ADMIN" ? "Admin" : "EVAPS"}
                 </div>
-                <div
-                  className={cx(
-                    "mt-1 text-[12px] leading-5",
-                    role === item ? "text-white/80" : "text-slate-500"
-                  )}
-                >
+                <div className={cx("mt-1 text-[12px] leading-5", role === item ? "text-white/80" : "text-slate-500")}>
                   {roleAccess[item].subtitle}
                 </div>
               </button>
@@ -699,40 +783,28 @@ function LoginAccessPanel({
               speed={16}
               className="mt-2 text-[22px] font-black text-slate-900"
             />
+
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Login ID
-                </div>
-                <div className="mt-1 text-sm font-bold text-slate-900">
-                  {current.id}
-                </div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Login ID</div>
+                <div className="mt-1 text-sm font-bold text-slate-900">{current.id}</div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Password
-                </div>
-                <div className="mt-1 text-sm font-bold text-slate-900">
-                  {showPass ? current.password : "••••••••"}
-                </div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Password</div>
+                <div className="mt-1 text-sm font-bold text-slate-900">{showPass ? current.password : "••••••••"}</div>
               </div>
             </div>
+
             <div className="mt-4 flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => setShowPass((s) => !s)}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                {showPass ? (
-                  <EyeOff className="h-3.5 w-3.5" />
-                ) : (
-                  <Eye className="h-3.5 w-3.5" />
-                )}
+                {showPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 {showPass ? "Hide" : "Show"}
               </button>
-              <div className="text-xs text-slate-500">
-                Enter to password field auto-focus
-              </div>
+              <div className="text-xs text-slate-500">Enter to password field auto-focus</div>
             </div>
           </div>
 
@@ -743,7 +815,8 @@ function LoginAccessPanel({
       <div className="space-y-4">
         <div className="overflow-hidden rounded-3xl border-2 border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.26em] text-[#2b275d]">
-            <ShieldCheck className="h-3.5 w-3.5" /> Secure Access
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Secure Access
           </div>
           <TypewriterText
             text="Login"
@@ -756,11 +829,10 @@ function LoginAccessPanel({
             delay={100}
             className="mt-2 text-[14px] leading-6 text-slate-500"
           />
+
           <div className="mt-5 space-y-4">
             <div>
-              <label className="mb-2 block text-[14px] font-semibold text-slate-800">
-                Role ID
-              </label>
+              <label className="mb-2 block text-[14px] font-semibold text-slate-800">Role ID</label>
               <input
                 value={user}
                 onChange={(e) => setUser(e.target.value)}
@@ -775,10 +847,9 @@ function LoginAccessPanel({
                 autoComplete="username"
               />
             </div>
+
             <div>
-              <label className="mb-2 block text-[14px] font-semibold text-slate-800">
-                Password
-              </label>
+              <label className="mb-2 block text-[14px] font-semibold text-slate-800">Password</label>
               <div className="relative">
                 <input
                   ref={passwordRef}
@@ -786,7 +857,7 @@ function LoginAccessPanel({
                   value={pass}
                   onChange={(e) => setPass(e.target.value)}
                   className="w-full rounded-2xl border border-slate-400 px-4 py-3 pr-12 text-[15px] outline-none transition focus:border-[#2b275d] focus:ring-4 focus:ring-[#2b275d]/10"
-                  placeholder="Enter password"
+                  placeholder="Enter password..."
                   autoComplete="current-password"
                 />
                 <button
@@ -794,55 +865,52 @@ function LoginAccessPanel({
                   onClick={() => setShowPass((s) => !s)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-700"
                 >
-                  {showPass ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
+
             <button
               onClick={onLogin}
               disabled={loginBusy}
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2b275d] px-4 py-3 text-[15px] font-bold text-white shadow-lg shadow-[#2b275d]/20 transition hover:scale-[1.01] hover:bg-[#342f73] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loginBusy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
+              {loginBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {loginBusy ? "Signing in..." : `Login as ${role}`}
             </button>
-          </div>
-          <div className="mt-5 flex items-center justify-between gap-3 text-[12px] text-slate-500">
-            <span>Current role</span>
-            <span className="rounded-full border border-slate-300 px-3 py-1">
-              {current.badge}
-            </span>
-          </div>
-          {loginError ? (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-sm font-semibold text-red-600">
-              Selected role ke liye ID ya password match nahi hua.
+
+            <div className="flex items-center justify-between gap-3 text-[12px] text-slate-500">
+              <span>Current role</span>
+              <span className="rounded-full border border-slate-300 px-3 py-1">{current.badge}</span>
             </div>
-          ) : null}
-          {isLoggedIn ? (
-            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm font-semibold text-emerald-700">
-              Login successful. Ab role ke hisaab se aage ka dashboard visible hai.
-            </div>
-          ) : null}
+
+            {loginError && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-sm font-semibold text-red-600">
+                Selected role ke liye ID ya password match nahi hua.
+              </div>
+            )}
+
+            {isLoggedIn && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm font-semibold text-emerald-700">
+                Login successful. Ab role ke hisaab se aage ka dashboard visible hai.
+              </div>
+            )}
+          </div>
         </div>
+
         <ConsoleWindow title="Role Console" lines={consoleLines} />
       </div>
     </div>
   );
 }
+
 export default function HRTrainingRoute() {
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [showSidebar, setShowSidebar] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const [timer, setTimer] = useState(0);
+
   const [role, setRole] = useState("HR");
   const [user, setUser] = useState(roleAccess.HR.id);
   const [pass, setPass] = useState("");
@@ -850,30 +918,25 @@ export default function HRTrainingRoute() {
   const [loginError, setLoginError] = useState(false);
   const [consoleLines, setConsoleLines] = useState([]);
   const [loginBusy, setLoginBusy] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const passwordRef = useRef(null);
   const autoplayRef = useRef(null);
   const timerRef = useRef(null);
 
   const current = steps[step];
-  const progress = useMemo(
-    () => ((step + 1) / steps.length) * 100,
-    [step]
-  );
+  const progress = useMemo(() => ((step + 1) / steps.length) * 100, [step]);
 
   useEffect(() => {
     if (!playing) return;
     autoplayRef.current = window.setInterval(() => {
       setStep((s) => (s + 1) % steps.length);
-    }, AUTO_SLIDE_MS);
+    }, AUTOSLIDEMS);
     return () => clearInterval(autoplayRef.current);
   }, [playing]);
 
   useEffect(() => {
-    timerRef.current = window.setInterval(
-      () => setTimer((t) => t + 1),
-      1000
-    );
+    timerRef.current = window.setInterval(() => setTimer((t) => t + 1), 1000);
     return () => clearInterval(timerRef.current);
   }, []);
 
@@ -891,14 +954,9 @@ export default function HRTrainingRoute() {
   }, []);
 
   useEffect(() => {
-    const onFullscreenChange = () =>
-      setFullscreen(!!document.fullscreenElement);
+    const onFullscreenChange = () => setFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () =>
-      document.removeEventListener(
-        "fullscreenchange",
-        onFullscreenChange
-      );
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
   useEffect(() => {
@@ -907,41 +965,17 @@ export default function HRTrainingRoute() {
     setLoginError(false);
     setIsLoggedIn(false);
     setConsoleLines([
-      {
-        id: "boot-1",
-        text: "System booting role access console...",
-        tone: "muted",
-      },
-      {
-        id: "boot-2",
-        text: `Role selected: ${roleAccess[role].title}`,
-        tone: "default",
-      },
-      {
-        id: "boot-3",
-        text: `Login ID loaded: ${roleAccess[role].id}`,
-        tone: "default",
-      },
-      {
-        id: "boot-4",
-        text: "Password field ready for input.",
-        tone: "muted",
-      },
-      {
-        id: "boot-5",
-        text: `Preview modules: ${roleAccess[role].modules.join(", ")}`,
-        tone: "muted",
-      },
+      { id: "boot-1", text: "System booting role access console...", tone: "muted" },
+      { id: "boot-2", text: `Role selected: ${roleAccess[role].title}`, tone: "default" },
+      { id: "boot-3", text: `Login ID loaded: ${roleAccess[role].id}`, tone: "default" },
+      { id: "boot-4", text: "Password field ready for input.", tone: "muted" },
+      { id: "boot-5", text: `Preview modules: ${roleAccess[role].modules.join(", ")}`, tone: "muted" },
     ]);
-    const t = setTimeout(
-      () => passwordRef.current?.focus(),
-      0
-    );
+    const t = setTimeout(() => passwordRef.current?.focus(), 0);
     return () => clearTimeout(t);
   }, [role]);
 
-  const goPrev = () =>
-    setStep((s) => (s - 1 + steps.length) % steps.length);
+  const goPrev = () => setStep((s) => (s - 1 + steps.length) % steps.length);
   const goNext = () => setStep((s) => (s + 1) % steps.length);
 
   const resetToHome = () => {
@@ -956,13 +990,8 @@ export default function HRTrainingRoute() {
     setIsLoggedIn(false);
     setLoginError(false);
     setLoginBusy(false);
-    setConsoleLines([
-      {
-        id: "reset-1",
-        text: "Session reset completed.",
-        tone: "muted",
-      },
-    ]);
+    setShowExitConfirm(false);
+    setConsoleLines([{ id: "reset-1", text: "Session reset completed.", tone: "muted" }]);
   };
 
   const handleLogout = () => {
@@ -970,58 +999,32 @@ export default function HRTrainingRoute() {
     setLoginError(false);
     setPass("");
     setStep(0);
-    setConsoleLines((prev) => [
-      ...prev,
-      {
-        id: `logout-${Date.now()}`,
-        text: "Session ended. Returned to login state.",
-        tone: "muted",
-      },
-    ]);
+    setConsoleLines((prev) => [...prev, { id: `logout-${Date.now()}`, text: "Session ended. Returned to login state.", tone: "muted" }]);
   };
 
-  const appendConsole = (line) =>
-    setConsoleLines((prev) => [
-      ...prev,
-      {
-        id: `${Date.now()}-${Math.random()}`,
-        ...line,
-      },
-    ]);
+  const appendConsole = (line) => setConsoleLines((prev) => [...prev, { id: `${Date.now()}-${Math.random()}`, ...line }]);
 
   const handleLogin = async () => {
     const correct = roleAccess[role];
     setLoginBusy(true);
-    appendConsole({
-      text: `Checking credentials for ${role}...`,
-      tone: "muted",
-    });
-    await new Promise((r) => setTimeout(r, LOGIN_DELAY));
-    if (
-      user.trim() === correct.id &&
-      pass.trim() === correct.password
-    ) {
+    appendConsole({ text: `Checking credentials for ${role}...`, tone: "muted" });
+    await new Promise((r) => setTimeout(r, LOGINDELAY));
+
+    if (user.trim() === correct.id && pass.trim() === correct.password) {
       setIsLoggedIn(true);
       setLoginError(false);
-      appendConsole({
-        text: "Authentication successful.",
-        tone: "success",
-      });
-      appendConsole({
-        text: "Loading role dashboard...",
-        tone: "default",
-      });
+      appendConsole({ text: "Authentication successful.", tone: "success" });
+      appendConsole({ text: "Loading role dashboard...", tone: "default" });
       if (role === "USER") setStep(1);
       else if (role === "HR") setStep(2);
       else if (role === "ADMIN") setStep(4);
       else setStep(5);
+      beep();
     } else {
       setIsLoggedIn(false);
       setLoginError(true);
-      appendConsole({
-        text: "Authentication failed. Invalid ID or password.",
-        tone: "error",
-      });
+      appendConsole({ text: "Authentication failed. Invalid ID or password.", tone: "error" });
+      beep();
     }
     setLoginBusy(false);
   };
@@ -1029,89 +1032,38 @@ export default function HRTrainingRoute() {
   const fmtTime = (sec) => {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(
-      2,
-      "0"
-    )}`;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
-  const shellTitle =
-    {
-      login: {
-        title: "Role Based Login Access",
-        desc: "Role select karte hi ID auto-fill hoti hai. Password field me Enter ke baad focus shift hota hai, aur login ke baad specific dashboard preview dikhaya jata hai.",
-      },
-      user: {
-        title: "User Flow After Login",
-        desc: "User ko sirf self scanner aur apni attendance related basic view dikhna chahiye.",
-      },
-      hrEntries: {
-        title: "HR Flow Entries and Scanner",
-        desc: "HR login ke turant baad scanner, attendance entries, aur hall transfer controls visible honge.",
-      },
-      hrRoster: {
-        title: "HR Flow Roster Manager",
-        desc: "HR employee roster, hall mapping, aur shift level data manage karega.",
-      },
-      admin: {
-        title: "Admin Flow Full Summary",
-        desc: "Admin ko sab roles ka overview, hall summary, aur complete control layout dikhna chahiye.",
-      },
-      evaps: {
-        title: "EVAPS Workflow Access",
-        desc: "EVAPS approvals aur visitor workflow ko guided animated layout me show karega.",
-      },
-    }[current.tab];
-
-  const handleKeyDown = useCallback(
-    (e) => {
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        goNext();
-      }
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        goPrev();
-      }
-      if (e.key === " ") {
-        e.preventDefault();
-        setPlaying((p) => !p);
-      }
-      if (e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        const toggleFullscreen = async () => {
-          if (!document.fullscreenElement)
-            await document.documentElement
-              .requestFullscreen()
-              .catch(() => {});
-          else
-            await document
-              .exitFullscreen()
-              .catch(() => {});
-        };
-        toggleFullscreen();
-      }
+  const shellTitle = {
+    login: {
+      title: "Role Based Login Access",
+      desc: "Role select karte hi ID auto-fill hoti hai. Password field me Enter ke baad focus shift hota hai, aur login ke baad specific dashboard preview dikhaya jata hai.",
     },
-    [] // deliberate: stable handlers
-  );
-
-  useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown);
-    return () =>
-      window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
-
-  const toggleFullscreen = async () => {
-    if (!document.fullscreenElement)
-      await document.documentElement
-        .requestFullscreen()
-        .catch(() => {});
-    else
-      await document.exitFullscreen().catch(() => {});
-  };
+    user: {
+      title: "User Flow After Login",
+      desc: "User ko sirf self scanner aur apni attendance related basic view dikhna chahiye.",
+    },
+    hrEntries: {
+      title: "HR Flow Entries and Scanner",
+      desc: "HR login ke turant baad scanner, attendance entries, aur hall transfer controls visible honge.",
+    },
+    hrRoster: {
+      title: "HR Flow Roster Manager",
+      desc: "HR employee roster, hall mapping, aur shift level data manage karega.",
+    },
+    admin: {
+      title: "Admin Flow Full Summary",
+      desc: "Admin ko sab roles ka overview, hall summary, aur complete control layout dikhna chahiye.",
+    },
+    evaps: {
+      title: "EVAPS Workflow Access",
+      desc: "EVAPS approvals aur visitor workflow ko guided animated layout me show karega.",
+    },
+  }[current.tab];
 
   const renderStepContent = () => {
-    if (current.tab === "login")
+    if (current.tab === "login") {
       return (
         <LoginAccessPanel
           role={role}
@@ -1128,12 +1080,44 @@ export default function HRTrainingRoute() {
           loginBusy={loginBusy}
         />
       );
+    }
     if (current.tab === "user") return <UserDashboard />;
     if (current.tab === "hrEntries") return <HREntriesDashboard />;
     if (current.tab === "hrRoster") return <HRRosterDashboard />;
     if (current.tab === "admin") return <AdminDashboard />;
     return <EVAPSFlow />;
   };
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch {}
+  };
+
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      goNext();
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      goPrev();
+    }
+    if (e.key === " ") {
+      e.preventDefault();
+      setPlaying((p) => !p);
+    }
+    if (e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      toggleFullscreen();
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
 
   return (
     <div className="fixed inset-0 z-[999] overflow-hidden bg-[#f4f6fb] text-slate-900">
@@ -1142,21 +1126,16 @@ export default function HRTrainingRoute() {
       `}</style>
 
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        {/* top bar */}
         <div className="border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="mx-auto max-w-[1600px] px-3 py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#23205C] text-white shadow-sm">
+                <div className="flex h-10 w-10 items-center justify-center  bg-[#23205C] text-white shadow-sm">
                   <LayoutDashboard className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-2xl font-black tracking-tight text-[#23205C]">
-                    Dixon
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    The brand behind brands
-                  </div>
+                  <div className="text-2xl font-black tracking-tight text-[#23205C]">Dixon</div>
+                  <div className="text-xs text-slate-500">The brand behind brands</div>
                 </div>
               </div>
 
@@ -1169,9 +1148,7 @@ export default function HRTrainingRoute() {
                       onClick={() => setStep(idx)}
                       className={cx(
                         "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition duration-300 hover:-translate-y-0.5",
-                        current.tab === t.tab
-                          ? "border-[#23205C] bg-[#23205C] text-white shadow-sm"
-                          : "border-slate-300 bg-white text-slate-700"
+                        current.tab === t.tab ? "border-[#23205C] bg-[#23205C] text-white shadow-sm" : "border-slate-300 bg-white text-slate-700"
                       )}
                     >
                       <ActiveIcon className="h-4 w-4" />
@@ -1192,28 +1169,21 @@ export default function HRTrainingRoute() {
                   onClick={() => setPlaying((p) => !p)}
                   className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
-                  {playing ? (
-                    <Pause className="mr-1 inline h-4 w-4" />
-                  ) : (
-                    <Play className="mr-1 inline h-4 w-4" />
-                  )}
+                  {playing ? <Pause className="mr-1 inline h-4 w-4" /> : <Play className="mr-1 inline h-4 w-4" />}
                   {playing ? "Pause" : "Play"}
                 </button>
                 <button
                   onClick={resetToHome}
-                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="rounded-xl border border-[#E0222A] bg-[#E0222A] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#c91b22]"
                 >
-                  <Home className="mr-1 inline h-4 w-4" /> Home
+                  <Home className="mr-1 inline h-4 w-4" />
+                  Exit
                 </button>
                 <button
                   onClick={toggleFullscreen}
                   className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
-                  {fullscreen ? (
-                    <Minimize2 className="mr-1 inline h-4 w-4" />
-                  ) : (
-                    <Maximize2 className="mr-1 inline h-4 w-4" />
-                  )}
+                  {fullscreen ? <Minimize2 className="mr-1 inline h-4 w-4" /> : <Maximize2 className="mr-1 inline h-4 w-4" />}
                   {fullscreen ? "Exit Full" : "Fullscreen"}
                 </button>
               </div>
@@ -1221,10 +1191,9 @@ export default function HRTrainingRoute() {
           </div>
         </div>
 
-        {/* main area */}
         <div className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] flex-1 gap-3 px-3 py-3">
           {showSidebar && (
-            <div className="hidden w-[260px] shrink-0 flex-col rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:flex">
+            <div className="hidden w-[260px] shrink-0 flex-col  border border-slate-200 bg-white p-6 shadow-sm lg:flex">
               <div className="mb-3 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
                 <span>Training Map</span>
                 <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-[10px]">
@@ -1242,20 +1211,14 @@ export default function HRTrainingRoute() {
                       onClick={() => setStep(idx)}
                       className={cx(
                         "flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left text-xs transition hover:bg-slate-50",
-                        isActive
-                          ? "border-[#23205C] bg-[#23205C] text-white shadow-sm"
-                          : "border-slate-200 bg-white text-slate-700"
+                        isActive ? "border-[#23205C] bg-[#23205C] text-white shadow-sm" : "border-slate-200 bg-white text-slate-700"
                       )}
                     >
                       <span className="flex items-center gap-2">
                         <Icon className="h-3.5 w-3.5" />
                         {s.title}
                       </span>
-                      {isActive && (
-                        <span className="text-[10px] uppercase tracking-[0.18em]">
-                          Active
-                        </span>
-                      )}
+                      {isActive && <span className="text-[10px] uppercase tracking-[0.18em]">Active</span>}
                     </button>
                   );
                 })}
@@ -1288,41 +1251,32 @@ export default function HRTrainingRoute() {
             </div>
           )}
 
-          <div className="flex-1 overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/60 p-3 shadow-sm">
+          <div className="flex-1 overflow-hidden  border border-slate-200 bg-slate-50/60 p-6 shadow-sm">
             <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-600">
                   <Sparkles className="h-3 w-3" />
                   {shellTitle.title}
                 </div>
-                <p className="mt-2 text-[13px] text-slate-600">
-                  {shellTitle.desc}
-                </p>
+                <p className="mt-2 text-[13px] text-slate-600">{shellTitle.desc}</p>
               </div>
+
               <div className="flex items-center gap-2">
-                <button
-                  onClick={goPrev}
-                  className="rounded-full border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-                >
+                <button onClick={goPrev} className="rounded-full border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50">
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <button
-                  onClick={goNext}
-                  className="rounded-full border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-                >
+                <button onClick={goNext} className="rounded-full border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50">
                   <ChevronRight className="h-4 w-4" />
                 </button>
-                <button
-                  onClick={handleLogout}
-                  className="rounded-full border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-                >
+                <button onClick={handleLogout} className="rounded-full border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50">
                   <LogOut className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={resetToHome}
-                  className="rounded-full border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
+                  onClick={() => setShowExitConfirm(true)}
+                  className="rounded-full border border-[#E0222A] bg-[#E0222A] p-2 text-white hover:bg-[#c91b22]"
+                  title="Exit"
                 >
-                  <RotateCcw className="h-4 w-4" />
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -1333,6 +1287,36 @@ export default function HRTrainingRoute() {
           </div>
         </div>
       </div>
+
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E0222A]/10 text-[#E0222A]">
+                <CircleAlert className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Exit training?</h3>
+                <p className="text-sm text-slate-600">Ye module close hoga aur home reset ho jayega.</p>
+              </div>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className="flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={resetToHome}
+                className="flex-1 rounded-2xl bg-[#E0222A] px-4 py-3 font-bold text-white hover:bg-[#c91b22]"
+              >
+                Exit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
