@@ -155,8 +155,8 @@ function DashboardApp() {
 
 export default function App() {
   return (
-    <HRProvider>
+  
       <DashboardApp />
-    </HRProvider>
+  
   );
 }

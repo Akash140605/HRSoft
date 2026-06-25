@@ -259,94 +259,94 @@ export default function ScannerPanel() {
     focusCode();
   }, []);
 
-  const onProcess = async (value) => {
-    const finalCode = String(value ?? code).trim();
-    if (!finalCode) {
-      pushToast("error", "Please enter code.");
+ const onProcess = async (inputCode) => {
+  const finalCode = String(inputCode ?? code).trim();
+
+  if (!finalCode) {
+    pushToast("error", "Please enter code.");
+    return;
+  }
+  if (!canScan) {
+    pushToast("error", "Capacity locked.");
+    return;
+  }
+  if (busy || scannerPaused) return;
+
+  setBusy(true);
+  setScannerPaused(true);
+
+  try {
+    const res = await processEntry(finalCode);
+    const text = String(res?.text || "").toLowerCase();
+    const alreadyScanned =
+      res?.alreadyScanned ||
+      text.includes("already scanned") ||
+      text.includes("already");
+
+    if (res?.ok) {
+      pushToast("success", res.text || "Done");
+      resetAfterDone();
       return;
     }
-    if (!canScan) {
-      pushToast("error", "Capacity locked.");
-      return;
-    }
-    if (busy || scannerPaused) return;
 
-    setBusy(true);
-    setScannerPaused(true);
-
-    try {
-      const res = await processEntry(finalCode);
-      const text = String(res?.text || "").toLowerCase();
-      const alreadyScanned =
-        res?.alreadyScanned ||
-        text.includes("already scanned") ||
-        text.includes("already");
-
-      if (res?.ok) {
-        pushToast("success", res.text || "Done");
-        resetAfterDone();
-        return;
-      }
-
-      if (alreadyScanned) {
-        pushToast("error", res.text || "Already scanned");
-        setTimeout(() => {
-          hardClearCode();
-          setScannerPaused(false);
-        }, 120);
-        return;
-      }
-
-      if (!res?.ok && res?.weekOff && isHR) {
-        pushToast(res?.type || "error", res?.text || "Week off");
-
-        const ok = window.confirm("Week off hai. HR override karna hai?");
-        if (ok) {
-          const ov = await hrOverrideEntry({
-            code: finalCode,
-            hallId: selectedHall,
-            reason: reason.trim() || "Week off override by HR",
-          });
-
-          if (ov.ok) {
-            pushToast("success", ov.text || "Override done");
-            resetAfterDone();
-          } else {
-            pushToast("error", ov.text || "Override failed");
-            setTimeout(() => {
-              hardClearCode();
-              setScannerPaused(false);
-            }, 120);
-          }
-          return;
-        }
-
+    if (alreadyScanned) {
+      pushToast("error", res.text || "Already scanned");
+      setTimeout(() => {
+        hardClearCode();
         setScannerPaused(false);
-        focusCode();
+      }, 120);
+      return;
+    }
+
+    if (!res?.ok && res?.weekOff && isHR) {
+      pushToast(res?.type || "error", res?.text || "Week off");
+
+      const ok = window.confirm("Week off hai. HR override karna hai?");
+      if (ok) {
+        const ov = await hrOverrideEntry({
+          code: finalCode,
+          hallId: selectedHall,
+          reason: reason.trim() || "Week off override by HR",
+        });
+
+        if (ov.ok) {
+          pushToast("success", ov.text || "Override done");
+          resetAfterDone();
+        } else {
+          pushToast("error", ov.text || "Override failed");
+          setTimeout(() => {
+            hardClearCode();
+            setScannerPaused(false);
+          }, 120);
+        }
         return;
       }
 
-      pushToast(res?.type || "error", res?.text || "Done");
       setScannerPaused(false);
       focusCode();
-    } catch (err) {
-      pushToast("error", err?.message || "Processing failed");
-      setScannerPaused(false);
-      focusCode();
-    } finally {
-      setBusy(false);
+      return;
     }
-  };
 
-  const handleScannedCode = async (val) => {
-    const value = String(val || "").trim();
-    if (!value) return;
-    if (busy || scannerPaused) return;
+    pushToast(res?.type || "error", res?.text || "Done");
+    setScannerPaused(false);
+    focusCode();
+  } catch (err) {
+    pushToast("error", err?.message || "Processing failed");
+    setScannerPaused(false);
+    focusCode();
+  } finally {
+    setBusy(false);
+  }
+};
 
-    setCode(value);
-    await onProcess(value);
-  };
+const handleScannedCode = async (val) => {
+  const value = String(val || "").trim();
+  if (!value) return;
+  if (busy || scannerPaused) return;
 
+  setCode(value);
+  await onProcess(value);
+};
   const onMove = async () => {
     const finalCode = String(code || "").trim();
     const finalReason = String(reason || "").trim();

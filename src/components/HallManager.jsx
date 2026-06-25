@@ -7,6 +7,7 @@ import {
   ChevronUp,
   Palette,
   Loader2,
+  Save,
 } from "lucide-react";
 import { useHR } from "../context/HRContext";
 import hrApi from "../api/hrApi";
@@ -37,20 +38,18 @@ const normalizeHall = (hall) => ({
 
 export default function HallManager() {
   const { state, setState, hallUsage, SHIFT_OPTIONS, activeEntries } = useHR();
-
   const [openHallId, setOpenHallId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [drafts, setDrafts] = useState({});
 
   const fetchHalls = useCallback(async () => {
     setLoading(true);
     try {
       const res = await hrApi.getHalls();
       if (res.success) {
-        setState((prev) => ({
-          ...prev,
-          halls: Array.isArray(res.data) ? res.data.map(normalizeHall) : [],
-        }));
+        const halls = Array.isArray(res.data) ? res.data.map(normalizeHall) : [];
+        setState((prev) => ({ ...prev, halls }));
       }
     } finally {
       setLoading(false);
@@ -60,6 +59,18 @@ export default function HallManager() {
   useEffect(() => {
     fetchHalls();
   }, [fetchHalls, refreshKey]);
+
+  useEffect(() => {
+    const map = {};
+    (state.halls || []).forEach((h) => {
+      map[h.id] = {
+        name: h.name || "",
+        capacity: Number(h.capacity || 0),
+        color: h.color || "blue",
+      };
+    });
+    setDrafts(map);
+  }, [state.halls]);
 
   const hallSummary = useMemo(() => {
     const rosterCountMap = new Map();
@@ -114,42 +125,42 @@ export default function HallManager() {
     setOpenHallId((prev) => (prev === hallId ? null : hallId));
   };
 
-  const updateHall = async (hallId, updates) => {
-    const current = state.halls.find((h) => String(h.id) === String(hallId));
-    const prevHall = current ? { ...current } : null;
-
-    setState((prev) => ({
+  const patchDraft = (hallId, updates) => {
+    setDrafts((prev) => ({
       ...prev,
-      halls: prev.halls.map((h) => (String(h.id) === String(hallId) ? { ...h, ...updates } : h)),
+      [hallId]: {
+        ...(prev[hallId] || {}),
+        ...updates,
+      },
     }));
+  };
+
+  const saveHall = async (hallId) => {
+    const current = state.halls.find((h) => String(h.id) === String(hallId));
+    const draft = drafts[hallId];
+    if (!current || !draft) return;
+
+    const payload = {
+      name: draft.name ?? current.name ?? "",
+      capacity: Number(draft.capacity ?? current.capacity ?? 0),
+      color: draft.color ?? current.color ?? "blue",
+    };
 
     setLoading(true);
     try {
-      const payload = {
-        name: updates.name ?? current?.name ?? "",
-        capacity: updates.capacity ?? current?.capacity ?? 0,
-        color: updates.color ?? current?.color ?? "blue",
-      };
-
       const res = await hrApi.updateHall(hallId, payload);
       if (res.success) {
+        setState((prev) => ({
+          ...prev,
+          halls: prev.halls.map((h) =>
+            String(h.id) === String(hallId) ? { ...h, ...payload } : h
+          ),
+        }));
         setRefreshKey((k) => k + 1);
       } else {
-        if (prevHall) {
-          setState((prev) => ({
-            ...prev,
-            halls: prev.halls.map((h) => (String(h.id) === String(hallId) ? prevHall : h)),
-          }));
-        }
         alert(res.error || "Hall update failed");
       }
     } catch (error) {
-      if (prevHall) {
-        setState((prev) => ({
-          ...prev,
-          halls: prev.halls.map((h) => (String(h.id) === String(hallId) ? prevHall : h)),
-        }));
-      }
       alert(error.message || "Hall update failed");
     } finally {
       setLoading(false);
@@ -258,6 +269,7 @@ export default function HallManager() {
                 const accent = accentMap[hall.color] || accentMap.blue;
                 const styleClass = isOpen ? `${accent.border} ${accent.ring} shadow-lg` : "border-slate-200 shadow-sm";
                 const shiftBreakdown = hallShiftBreakdown.find((x) => String(x.hallId) === String(hall.id))?.counts || {};
+                const draft = drafts[hall.id] || {};
 
                 return (
                   <div key={hall.id} className={`overflow-hidden border-2 bg-white transition ${styleClass}`}>
@@ -318,8 +330,8 @@ export default function HallManager() {
                           <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">Hall name</label>
                             <input
-                              value={hall.name || ""}
-                              onChange={(e) => updateHall(hall.id, { name: e.target.value })}
+                              value={draft.name ?? ""}
+                              onChange={(e) => patchDraft(hall.id, { name: e.target.value })}
                               className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
                               placeholder="Hall name"
                               disabled={loading}
@@ -331,8 +343,8 @@ export default function HallManager() {
                             <input
                               type="number"
                               min="0"
-                              value={hall.capacity ?? 0}
-                              onChange={(e) => updateHall(hall.id, { capacity: Number(e.target.value) })}
+                              value={draft.capacity ?? 0}
+                              onChange={(e) => patchDraft(hall.id, { capacity: Number(e.target.value) })}
                               className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
                               placeholder="Capacity"
                               disabled={loading}
@@ -342,8 +354,8 @@ export default function HallManager() {
                           <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">Color</label>
                             <select
-                              value={hall.color || "blue"}
-                              onChange={(e) => updateHall(hall.id, { color: e.target.value })}
+                              value={draft.color || "blue"}
+                              onChange={(e) => patchDraft(hall.id, { color: e.target.value })}
                               className="w-full border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-[#23205C]"
                               disabled={loading}
                             >
@@ -356,9 +368,17 @@ export default function HallManager() {
                           </div>
 
                           <div className="flex items-end">
-                            <div className={`w-full border-2 px-4 py-2 text-center text-sm font-semibold ${accent.soft}`}>
-                              Editable fields
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => saveHall(hall.id)}
+                              disabled={loading}
+                              className={`flex w-full items-center justify-center gap-2 border-2 px-4 py-2 text-sm font-semibold ${
+                                loading ? "border-slate-200 bg-slate-100 text-slate-400" : "border-[#23205C] bg-[#23205C] text-white"
+                              }`}
+                            >
+                              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                              Save hall
+                            </button>
                           </div>
                         </div>
                       )}
