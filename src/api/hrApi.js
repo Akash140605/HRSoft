@@ -67,18 +67,11 @@ const request = async (url, method = "GET", data = null, extraHeaders = {}) => {
       };
     }
 
-    if (payload && typeof payload === "object") return payload;
-    return { success: true, data: null };
+    return payload && typeof payload === "object" ? payload : { success: true, data: null };
   } catch (error) {
-    if (error?.name === "AbortError") {
-      return { success: false, error: "Request timeout", status: 408 };
-    }
-
-    return {
-      success: false,
-      error: error?.message || "Network error",
-      status: 0,
-    };
+    return error?.name === "AbortError"
+      ? { success: false, error: "Request timeout", status: 408 }
+      : { success: false, error: error?.message || "Network error", status: 0 };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -120,7 +113,8 @@ const normalizeRosterPayload = (data = {}) => ({
 export const getEmployees = () => apiCall("employees");
 export const getEmployeeByCode = (code) => apiCall(`employees/${encodeURIComponent(code)}`);
 export const addEmployee = (data) => apiCall("employees", "POST", normalizeEmployeePayload(data));
-export const updateEmployee = (id, data) => apiCall(`employees/${encodeURIComponent(id)}`, "PUT", normalizeEmployeePayload(data));
+export const updateEmployee = (id, data) =>
+  apiCall(`employees/${encodeURIComponent(id)}`, "PUT", normalizeEmployeePayload(data));
 export const deleteEmployee = (id) => apiCall(`employees/${encodeURIComponent(id)}`, "DELETE");
 export const bulkImportEmployees = (data) =>
   apiCall("employees/bulk-import", "POST", {
@@ -130,8 +124,17 @@ export const bulkImportEmployees = (data) =>
 export const getRoster = (weekKey, hallId = "") =>
   apiCall("roster", "GET", null, { week_key: weekKey, hall_id: hallId });
 
-export const addRosterRow = (data) => apiCall("roster", "POST", { employees: [normalizeRosterPayload(data)] });
-export const updateRosterRow = (id, data) => apiCall(`roster/${encodeURIComponent(id)}`, "PUT", normalizeRosterPayload(data));
+export const addRosterRow = (data) =>
+  apiCall("roster", "POST", {
+    week_key: String(data?.week_key || data?.weekKey || "").trim(),
+    week_start: String(data?.week_start || data?.weekStart || "").trim(),
+    week_end: String(data?.week_end || data?.weekEnd || "").trim(),
+    employees: [normalizeRosterPayload(data)],
+  });
+
+export const updateRosterRow = (id, data) =>
+  apiCall(`roster/${encodeURIComponent(id)}`, "PUT", normalizeRosterPayload(data));
+
 export const deleteRosterRow = (id) => apiCall(`roster/${encodeURIComponent(id)}`, "DELETE");
 
 export const bulkImportRoster = (data) => {
