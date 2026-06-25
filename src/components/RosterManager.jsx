@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Download,
   FileUp,
   Plus,
   Search,
@@ -9,13 +10,13 @@ import {
   FileSpreadsheet,
   X,
   AlertCircle,
+  Building2,
+  Users,
+  Trash,
+  CalendarDays,
   Copy,
   Filter,
   HelpCircle,
-  Download,
-  Trash,
-  Building2,
-  Users,
 } from "lucide-react";
 import { useHR } from "../context/HRContext";
 import hrApi from "../api/hrApi";
@@ -34,32 +35,25 @@ const normalizeRow = (row, fallbackHall = null) => ({
   hallName: row.hallName || row.hall_name || fallbackHall?.name || "",
 });
 
-const pad2 = (n) => String(n).padStart(2, "0");
-const formatDate = (d) =>
-  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-
-const getIsoWeekInfo = (date = new Date()) => {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const day = d.getDay() || 7;
-  d.setDate(d.getDate() + 4 - day);
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  const weekKey = `${d.getFullYear()}-W${pad2(weekNo)}`;
-  const start = new Date(d);
-  start.setDate(d.getDate() - 3);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return { weekKey, weekStart: formatDate(start), weekEnd: formatDate(end) };
+const getCurrentWeekKey = () => {
+  const d = new Date();
+  const utcDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+  return `${utcDate.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 };
 
 const parseCsvLine = (line) => {
   const out = [];
   let cur = "";
   let inQuotes = false;
+
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     const next = line[i + 1];
+
     if (ch === '"' && inQuotes && next === '"') {
       cur += '"';
       i++;
@@ -72,53 +66,22 @@ const parseCsvLine = (line) => {
       cur += ch;
     }
   }
+
   out.push(cur.trim());
   return out;
 };
 
-function Field({ label, className = "", ...props }) {
-  return (
-    <div className="space-y-1 min-w-0">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {label}
-      </div>
-      <input
-        {...props}
-        className={`h-9 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#E0222A] ${className}`}
-      />
-    </div>
-  );
-}
-
-function SelectField({ label, children, className = "", ...props }) {
-  return (
-    <div className="space-y-1 min-w-0">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {label}
-      </div>
-      <select
-        {...props}
-        className={`h-9 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#E0222A] ${className}`}
-      >
-        {children}
-      </select>
-    </div>
-  );
-}
-
 export default function RosterManager() {
   const { state, setState } = useHR();
-  const weekInfo = useMemo(() => getIsoWeekInfo(), []);
-
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [weekKey, setWeekKey] = useState(weekInfo.weekKey);
+  const [weekKey, setWeekKey] = useState(getCurrentWeekKey());
   const [sourceWeekKey, setSourceWeekKey] = useState("");
   const [form, setForm] = useState({
-    weekKey: weekInfo.weekKey,
-    weekStart: weekInfo.weekStart,
-    weekEnd: weekInfo.weekEnd,
+    weekKey: getCurrentWeekKey(),
+    weekStart: "",
+    weekEnd: "",
     name: "",
     code: "",
     designation: "",
@@ -143,27 +106,18 @@ export default function RosterManager() {
 
   useEffect(() => {
     if (!form.hallId && halls.length) {
-      setForm((p) => ({
-        ...p,
-        hallId: String(halls[0].id),
-        hallName: halls[0].name || "",
-      }));
+      setForm((p) => ({ ...p, hallId: String(halls[0].id), hallName: halls[0].name || "" }));
     }
   }, [form.hallId, halls]);
 
   useEffect(() => {
-    const info = getIsoWeekInfo();
-    setWeekKey(info.weekKey);
-    setForm((p) => ({
-      ...p,
-      weekKey: info.weekKey,
-      weekStart: info.weekStart,
-      weekEnd: info.weekEnd,
-    }));
+    setWeekKey(getCurrentWeekKey());
+    setForm((p) => ({ ...p, weekKey: getCurrentWeekKey() }));
   }, []);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
+
     return rosterRows.filter((e) => {
       const matchesSearch =
         !q ||
@@ -185,12 +139,11 @@ export default function RosterManager() {
   }, [query, rosterRows, filters]);
 
   const clearForm = () => {
-    const info = getIsoWeekInfo();
     setEditingId(null);
     setForm({
-      weekKey: info.weekKey,
-      weekStart: info.weekStart,
-      weekEnd: info.weekEnd,
+      weekKey: weekKey,
+      weekStart: "",
+      weekEnd: "",
       name: "",
       code: "",
       designation: "",
@@ -250,7 +203,9 @@ export default function RosterManager() {
     setLoading(true);
     try {
       const results = await Promise.allSettled(targetIds.map((id) => hrApi.deleteRosterRow(id)));
-      const successCount = results.filter((r) => r.status === "fulfilled" && r.value?.success).length;
+      const successCount = results.filter(
+        (r) => r.status === "fulfilled" && r.value?.success
+      ).length;
 
       setState((prev) => ({
         ...prev,
@@ -325,11 +280,9 @@ export default function RosterManager() {
   };
 
   const startEdit = (row) => {
-    const wk = row.week_key || weekKey;
     setEditingId(row.id);
-    setWeekKey(wk);
     setForm({
-      weekKey: wk,
+      weekKey: row.week_key || weekKey,
       weekStart: row.week_start || "",
       weekEnd: row.week_end || "",
       name: row.name || "",
@@ -372,17 +325,7 @@ export default function RosterManager() {
     }
   };
 
-  const headers = [
-    "week_key",
-    "week_start",
-    "week_end",
-    "name",
-    "code",
-    "designation",
-    "weekOff",
-    "shift",
-    "hallName",
-  ];
+  const headers = ["week_key", "week_start", "week_end", "name", "code", "designation", "weekOff", "shift", "hallName"];
 
   const toCsv = (data) =>
     [headers, ...data.map((r) => headers.map((h) => r[h] ?? r[h.replace("weekOff", "week_off")] ?? ""))]
@@ -436,8 +379,8 @@ export default function RosterManager() {
           return;
         }
 
-        const rawHeaders = parseCsvLine(lines[0]).map((s) => s.replaceAll('"', "").trim());
-        const headersNorm = rawHeaders.map((h) => h.trim().toLowerCase());
+        const headers = parseCsvLine(lines[0]).map((s) => s.replaceAll('"', "").trim());
+        const headersNorm = headers.map((h) => h.trim().toLowerCase());
         const findCol = (...names) => headersNorm.findIndex((h) => names.includes(h));
 
         const idxWeekKey = findCol("week_key", "weekkey");
@@ -450,7 +393,9 @@ export default function RosterManager() {
         const idxShift = findCol("shift");
         const idxHallName = findCol("hallname", "hall_name", "hall");
 
-        const normalizeText = (val) => String(val || "").trim().toLowerCase().replace(/\s+/g, " ");
+        const normalizeText = (val) =>
+          String(val || "").trim().toLowerCase().replace(/\s+/g, " ");
+
         const hallsLookup = halls.map((h) => ({
           ...h,
           _normName: normalizeText(h.name),
@@ -478,6 +423,7 @@ export default function RosterManager() {
           if (!cols.length) continue;
 
           const get = (idx) => (idx >= 0 ? String(cols[idx] ?? "").trim() : "");
+
           const rowWeekKey = get(idxWeekKey) || weekKey;
           const rowWeekStart = get(idxWeekStart);
           const rowWeekEnd = get(idxWeekEnd);
@@ -517,13 +463,10 @@ export default function RosterManager() {
             shift,
             hall_id: hall.id,
             hall_name: hall.name,
-            week_key: rowWeekKey,
-            week_start: rowWeekStart || "",
-            week_end: rowWeekEnd || "",
           });
         }
 
-        if (!Array.isArray(rosterToImport) || rosterToImport.length === 0) {
+        if (!rosterToImport.length) {
           setMessage("CSV me valid roster rows nahi mile.");
           return;
         }
@@ -550,19 +493,15 @@ export default function RosterManager() {
           halls: currentHalls,
         }));
 
-        const payload = {
+        const response = await hrApi.bulkImportRoster({
           week_key: firstWeekKey || weekKey,
-          week_start: firstWeekStart || weekInfo.weekStart,
-          week_end: firstWeekEnd || weekInfo.weekEnd,
+          week_start: firstWeekStart || undefined,
+          week_end: firstWeekEnd || undefined,
           employees: rosterToImport,
-        };
-
-        const response = await hrApi.bulkImportRoster(payload);
+        });
 
         if (response.success) {
-          setMessage(
-            `✅ ${response.data?.imported || rosterToImport.length} roster rows imported for ${firstWeekKey || weekKey}!`
-          );
+          setMessage(`✅ ${response.data?.imported || rosterToImport.length} roster rows imported for ${firstWeekKey || weekKey}!`);
           await refreshRoster(firstWeekKey || weekKey);
         } else {
           setMessage("CSV import failed: " + (response.error || "Failed"));
@@ -603,7 +542,204 @@ export default function RosterManager() {
     }
   };
 
-  const resetFilters = () => setFilters({ hallId: "", shift: "", weekOff: "", designation: "" });
+  const stats = useMemo(() => {
+    const byHall = new Map();
+    rows.forEach((e) => {
+      const key = String(e.hallId || "");
+      byHall.set(key, (byHall.get(key) || 0) + 1);
+    });
+    return { total: rows.length, hallsUsed: byHall.size };
+  }, [rows]);
+
+  const resetFilters = () =>
+    setFilters({ hallId: "", shift: "", weekOff: "", designation: "" });
+
+  const Field = ({ label, ...props }) => (
+    <div className="space-y-1">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {label}
+      </div>
+      <input
+        {...props}
+        className={`h-9 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#E0222A] ${props.className || ""}`}
+      />
+    </div>
+  );
+
+  const SelectField = ({ label, children, ...props }) => (
+    <div className="space-y-1">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {label}
+      </div>
+      <select
+        {...props}
+        className={`h-9 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#E0222A] ${props.className || ""}`}
+      >
+        {children}
+      </select>
+    </div>
+  );
+
+  const FilterPanel = ({ compact = false, onClose = null }) => (
+    <div className="space-y-3">
+      <Field
+        label="Week Key"
+        value={form.weekKey}
+        onChange={(e) => setForm((p) => ({ ...p, weekKey: e.target.value }))}
+        placeholder="2026-W26"
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <Field
+          label="Week Start"
+          value={form.weekStart}
+          onChange={(e) => setForm((p) => ({ ...p, weekStart: e.target.value }))}
+          placeholder="2026-06-22"
+        />
+        <Field
+          label="Week End"
+          value={form.weekEnd}
+          onChange={(e) => setForm((p) => ({ ...p, weekEnd: e.target.value }))}
+          placeholder="2026-06-28"
+        />
+      </div>
+
+      <Field
+        label="Copy From"
+        placeholder="2026-W25"
+        value={sourceWeekKey}
+        onChange={(e) => setSourceWeekKey(e.target.value)}
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <SelectField
+          label="Hall"
+          value={filters.hallId}
+          onChange={(e) => setFilters((p) => ({ ...p, hallId: e.target.value }))}
+        >
+          <option value="">All Halls</option>
+          {halls.map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.name}
+            </option>
+          ))}
+        </SelectField>
+
+        <SelectField
+          label="Shift"
+          value={filters.shift}
+          onChange={(e) => setFilters((p) => ({ ...p, shift: e.target.value }))}
+        >
+          <option value="">All Shifts</option>
+          {["A", "B", "C", "AA", "BB", "G"].map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </SelectField>
+
+        <SelectField
+          label="Week Off"
+          value={filters.weekOff}
+          onChange={(e) => setFilters((p) => ({ ...p, weekOff: e.target.value }))}
+        >
+          <option value="">All Off</option>
+          {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </SelectField>
+
+        <Field
+          label="Designation"
+          placeholder="Operator"
+          value={filters.designation}
+          onChange={(e) => setFilters((p) => ({ ...p, designation: e.target.value }))}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"
+          onClick={resetFilters}
+        >
+          Reset
+        </button>
+        <button
+          type="button"
+          className="h-9 rounded-xl bg-[#23205C] px-3 text-sm font-semibold text-white"
+          onClick={importPreviousWeek}
+          disabled={loading}
+        >
+          Copy Week
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          className="h-9 rounded-xl bg-[#23205C] px-3 text-sm font-semibold text-white"
+          type="button"
+          onClick={exportCsv}
+        >
+          <Download className="mr-1 inline h-4 w-4" />
+          CSV
+        </button>
+        <button
+          className="h-9 rounded-xl bg-[#23205C] px-3 text-sm font-semibold text-white"
+          type="button"
+          onClick={exportExcel}
+        >
+          <FileSpreadsheet className="mr-1 inline h-4 w-4" />
+          Excel
+        </button>
+      </div>
+
+      <label className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700">
+        <FileUp className="h-4 w-4" />
+        Import CSV
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])}
+        />
+      </label>
+
+      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">
+        <div className="flex items-center gap-2 font-semibold text-slate-800">
+          <HelpCircle className="h-4 w-4" />
+          CSV Headers
+        </div>
+        <code className="mt-2 block rounded bg-white px-2 py-1 text-[11px]">
+          week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
+        </code>
+      </div>
+
+      {!compact && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            className="h-9 w-full rounded-xl border border-slate-300 bg-white px-3 pl-9 text-sm outline-none focus:border-[#E0222A]"
+            placeholder="Search roster"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      )}
+
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-9 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"
+        >
+          Close
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
@@ -637,118 +773,22 @@ export default function RosterManager() {
 
       <div className="grid gap-0 md:grid-cols-[270px_1fr]">
         <aside className="hidden border-r border-slate-300 p-3 md:block">
-          <div className="space-y-3">
-            <Field
-              label="Week Key"
-              value={form.weekKey}
-              onChange={(e) => {
-                const value = e.target.value;
-                setForm((p) => ({ ...p, weekKey: value }));
-                setWeekKey(value);
-              }}
-              placeholder="2026-W26"
-            />
-            <Field
-              label="Week Start"
-              value={form.weekStart}
-              onChange={(e) => setForm((p) => ({ ...p, weekStart: e.target.value }))}
-              placeholder="2026-06-22"
-            />
-            <Field
-              label="Week End"
-              value={form.weekEnd}
-              onChange={(e) => setForm((p) => ({ ...p, weekEnd: e.target.value }))}
-              placeholder="2026-06-28"
-            />
-            <Field
-              label="Copy From"
-              placeholder="2026-W25"
-              value={sourceWeekKey}
-              onChange={(e) => setSourceWeekKey(e.target.value)}
-            />
-
-            <div className="grid grid-cols-2 gap-2">
-              <SelectField
-                label="Hall"
-                value={filters.hallId}
-                onChange={(e) =>
-                  setFilters((p) => ({ ...p, hallId: e.target.value }))
-                }
-              >
-                <option value="">All Halls</option>
-                {halls.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.name}
-                  </option>
-                ))}
-              </SelectField>
-
-              <SelectField
-                label="Shift"
-                value={filters.shift}
-                onChange={(e) =>
-                  setFilters((p) => ({ ...p, shift: e.target.value }))
-                }
-              >
-                <option value="">All</option>
-                {["A", "B", "C", "AA", "BB", "G"].map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </SelectField>
-            </div>
-
-            <Field
-              label="Search"
-              placeholder="Search roster"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"
-                onClick={resetFilters}
-              >
-                Reset
-              </button>
-              <button
-                type="button"
-                className="h-9 rounded-xl bg-[#23205C] px-3 text-sm font-semibold text-white"
-                onClick={importPreviousWeek}
-                disabled={loading}
-              >
-                <Copy className="mr-1 inline h-4 w-4" />
-                Copy
-              </button>
-            </div>
-
-            <label className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700">
-              <FileUp className="h-4 w-4" />
-              Import CSV
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])}
-              />
-            </label>
-
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600 break-words">
-              <div className="flex items-center gap-2 font-semibold text-slate-800">
-                <HelpCircle className="h-4 w-4" />
-                CSV Headers
-              </div>
-              <code className="mt-2 block rounded bg-white px-2 py-1 text-[11px] whitespace-normal break-words">
-                week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
-              </code>
-            </div>
-          </div>
+          <FilterPanel />
         </aside>
 
-        <main className="p-3 md:p-4 min-w-0">
+        <main className="p-3 md:p-4">
+          <div className="mb-3 md:hidden">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="h-9 w-full rounded-xl border border-slate-300 bg-white px-3 pl-9 text-sm outline-none focus:border-[#E0222A]"
+                placeholder="Search roster"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
           <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
             <Field
               label="Name"
@@ -785,13 +825,11 @@ export default function RosterManager() {
               value={form.weekOff}
               onChange={(e) => setForm((p) => ({ ...p, weekOff: e.target.value }))}
             >
-              {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map(
-                (d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                )
-              )}
+              {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
             </SelectField>
 
             <SelectField
@@ -806,7 +844,6 @@ export default function RosterManager() {
                 }));
               }}
             >
-              <option value="">Select Hall</option>
               {halls.map((h) => (
                 <option key={h.id} value={h.id}>
                   {h.name} ({h.capacity})
@@ -818,11 +855,7 @@ export default function RosterManager() {
               label="Week Key"
               placeholder="2026-W26"
               value={form.weekKey}
-              onChange={(e) => {
-                const value = e.target.value;
-                setForm((p) => ({ ...p, weekKey: value }));
-                setWeekKey(value);
-              }}
+              onChange={(e) => setForm((p) => ({ ...p, weekKey: e.target.value }))}
             />
             <Field
               label="Week Start"
@@ -844,11 +877,7 @@ export default function RosterManager() {
                 onClick={upsertEmp}
                 disabled={loading}
               >
-                {editingId ? (
-                  <Save className="mr-1 inline h-4 w-4" />
-                ) : (
-                  <Plus className="mr-1 inline h-4 w-4" />
-                )}
+                {editingId ? <Save className="mr-1 inline h-4 w-4" /> : <Plus className="mr-1 inline h-4 w-4" />}
                 {editingId ? "Update Row" : "Add Row"}
               </button>
               <button
@@ -887,7 +916,7 @@ export default function RosterManager() {
 
           <div className="overflow-hidden border border-slate-300">
             <div className="max-h-[560px] overflow-auto">
-              <table className="min-w-[980px] md:min-w-full table-auto">
+              <table className="min-w-[980px] md:min-w-full">
                 <thead>
                   <tr>
                     <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Sel</th>
@@ -967,12 +996,7 @@ export default function RosterManager() {
                 <X className="h-5 w-5 text-slate-700" />
               </button>
             </div>
-            <Field
-              label="Search"
-              placeholder="Search roster"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+            <FilterPanel compact onClose={() => setIsFilterOpen(false)} />
           </div>
         </div>
       )}
@@ -993,14 +1017,18 @@ export default function RosterManager() {
               Excel me first row headers exactly ye honi chahiye:
             </p>
 
-            <code className="mt-3 block break-words whitespace-normal rounded bg-slate-100 px-3 py-2 text-xs">
+            <code className="mt-3 block break-all rounded bg-slate-100 px-3 py-2 text-xs">
               week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
             </code>
 
             <p className="mt-4 text-sm text-slate-600">Example row:</p>
-            <code className="mt-2 block break-words whitespace-normal rounded bg-slate-100 px-3 py-2 text-xs">
+            <code className="mt-2 block break-all rounded bg-slate-100 px-3 py-2 text-xs">
               2026-W26,2026-06-22,2026-06-28,KHUSH RAVI,165990,OPERATOR,Monday,AA,Hall 1
             </code>
+
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              Excel me pehle row me headers daalo, neeche data bharo, phir Save As → CSV UTF-8 format me export karo.
+            </div>
           </div>
         </div>
       )}
