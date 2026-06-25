@@ -79,12 +79,16 @@ export default function RosterManager() {
   const [weekKey, setWeekKey] = useState(getCurrentWeekKey());
   const [sourceWeekKey, setSourceWeekKey] = useState("");
   const [form, setForm] = useState({
+    weekKey: getCurrentWeekKey(),
+    weekStart: "",
+    weekEnd: "",
     name: "",
     code: "",
     designation: "",
     weekOff: "Sunday",
     shift: "A",
     hallId: "",
+    hallName: "",
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -98,15 +102,17 @@ export default function RosterManager() {
   });
 
   const rosterRows = state.roster || [];
+  const halls = state.halls || [];
 
   useEffect(() => {
-    if (!form.hallId && state.halls?.length) {
-      setForm((p) => ({ ...p, hallId: String(state.halls[0].id) }));
+    if (!form.hallId && halls.length) {
+      setForm((p) => ({ ...p, hallId: String(halls[0].id), hallName: halls[0].name || "" }));
     }
-  }, [form.hallId, state.halls]);
+  }, [form.hallId, halls]);
 
   useEffect(() => {
     setWeekKey(getCurrentWeekKey());
+    setForm((p) => ({ ...p, weekKey: getCurrentWeekKey() }));
   }, []);
 
   const rows = useMemo(() => {
@@ -119,21 +125,14 @@ export default function RosterManager() {
           .toLowerCase()
           .includes(q);
 
-      const matchesHall =
-        !filters.hallId || String(e.hallId || "") === String(filters.hallId);
-
-      const matchesShift =
-        !filters.shift || String(e.shift || "") === String(filters.shift);
-
+      const matchesHall = !filters.hallId || String(e.hallId || "") === String(filters.hallId);
+      const matchesShift = !filters.shift || String(e.shift || "") === String(filters.shift);
       const matchesWeekOff =
         !filters.weekOff ||
         String(e.weekOff || "").toLowerCase() === String(filters.weekOff).toLowerCase();
-
       const matchesDesignation =
         !filters.designation ||
-        String(e.designation || "")
-          .toLowerCase()
-          .includes(String(filters.designation).toLowerCase());
+        String(e.designation || "").toLowerCase().includes(String(filters.designation).toLowerCase());
 
       return matchesSearch && matchesHall && matchesShift && matchesWeekOff && matchesDesignation;
     });
@@ -142,12 +141,16 @@ export default function RosterManager() {
   const clearForm = () => {
     setEditingId(null);
     setForm({
+      weekKey: weekKey,
+      weekStart: "",
+      weekEnd: "",
       name: "",
       code: "",
       designation: "",
       weekOff: "Sunday",
       shift: "A",
-      hallId: String(state.halls?.[0]?.id || ""),
+      hallId: String(halls[0]?.id || ""),
+      hallName: halls[0]?.name || "",
     });
   };
 
@@ -156,9 +159,7 @@ export default function RosterManager() {
     try {
       const res = await hrApi.getRoster(wk);
       if (res.success) {
-        const list = Array.isArray(res.data)
-          ? res.data.map((r) => normalizeRow(r))
-          : [];
+        const list = Array.isArray(res.data) ? res.data.map((r) => normalizeRow(r)) : [];
         setState((prev) => ({ ...prev, roster: list }));
       } else {
         setMessage(res.error || "Roster load failed.");
@@ -196,16 +197,12 @@ export default function RosterManager() {
       return;
     }
 
-    const ok = window.confirm(
-      `⚠️ WARNING: ${targetIds.length} roster rows delete ho jayenge! Continue?`
-    );
+    const ok = window.confirm(`⚠️ WARNING: ${targetIds.length} roster rows delete ho jayenge! Continue?`);
     if (!ok) return;
 
     setLoading(true);
     try {
-      const results = await Promise.allSettled(
-        targetIds.map((id) => hrApi.deleteRosterRow(id))
-      );
+      const results = await Promise.allSettled(targetIds.map((id) => hrApi.deleteRosterRow(id)));
       const successCount = results.filter(
         (r) => r.status === "fulfilled" && r.value?.success
       ).length;
@@ -238,18 +235,19 @@ export default function RosterManager() {
     }
 
     setLoading(true);
-    const hall =
-      state.halls.find((h) => String(h.id) === String(form.hallId)) || null;
+    const hall = halls.find((h) => String(h.id) === String(form.hallId)) || null;
 
     const rosterData = {
-      week_key: weekKey,
+      week_key: form.weekKey || weekKey,
+      week_start: form.weekStart || "",
+      week_end: form.weekEnd || "",
       code: form.code.trim(),
       name: form.name.trim(),
       designation: form.designation.trim(),
       week_off: form.weekOff,
       shift: form.shift,
       hall_id: hall?.id || form.hallId || "",
-      hall_name: hall?.name || "",
+      hall_name: hall?.name || form.hallName || "",
     };
 
     try {
@@ -262,17 +260,13 @@ export default function RosterManager() {
 
         setState((prev) => {
           const nextRoster = editingId
-            ? prev.roster.map((e) =>
-                String(e.id) === String(editingId) ? returned : e
-              )
+            ? prev.roster.map((e) => (String(e.id) === String(editingId) ? returned : e))
             : [returned, ...prev.roster.filter((e) => String(e.code) !== String(returned.code))];
 
           return { ...prev, roster: nextRoster };
         });
 
-        setMessage(
-          editingId ? "Roster updated successfully!" : "Roster row added successfully!"
-        );
+        setMessage(editingId ? "Roster updated successfully!" : "Roster row added successfully!");
         setEditingId(null);
         clearForm();
       } else {
@@ -288,12 +282,16 @@ export default function RosterManager() {
   const startEdit = (row) => {
     setEditingId(row.id);
     setForm({
+      weekKey: row.week_key || weekKey,
+      weekStart: row.week_start || "",
+      weekEnd: row.week_end || "",
       name: row.name || "",
       code: row.code || "",
       designation: row.designation || "",
       weekOff: row.weekOff || "Sunday",
       shift: row.shift || "A",
       hallId: row.hallId || "",
+      hallName: row.hallName || "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -327,10 +325,10 @@ export default function RosterManager() {
     }
   };
 
-  const headers = ["id", "name", "code", "designation", "weekOff", "shift", "hallId", "hallName"];
+  const headers = ["week_key", "week_start", "week_end", "name", "code", "designation", "weekOff", "shift", "hallName"];
 
   const toCsv = (data) =>
-    [headers, ...data.map((r) => headers.map((h) => r[h] ?? ""))]
+    [headers, ...data.map((r) => headers.map((h) => r[h] ?? r[h.replace("weekOff", "week_off")] ?? ""))]
       .map((line) => line.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(","))
       .join("\n");
 
@@ -375,7 +373,7 @@ export default function RosterManager() {
     reader.onload = async () => {
       try {
         const text = String(reader.result || "").replace(/\uFEFF/g, "");
-        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         if (lines.length < 2) {
           setMessage("CSV me data nahi mila.");
           return;
@@ -398,7 +396,7 @@ export default function RosterManager() {
         const normalizeText = (val) =>
           String(val || "").trim().toLowerCase().replace(/\s+/g, " ");
 
-        const hallsLookup = (state.halls || []).map((h) => ({
+        const hallsLookup = halls.map((h) => ({
           ...h,
           _normName: normalizeText(h.name),
           _normId: normalizeText(h.id),
@@ -445,7 +443,7 @@ export default function RosterManager() {
           if (!hall) {
             const hallName =
               String(hallNameRaw || "").trim() ||
-              `Hall ${state.halls.length + newHallsToAdd.length + 1}`;
+              `Hall ${halls.length + newHallsToAdd.length + 1}`;
             const tempId = `temp-${hallName.toLowerCase().replace(/\s+/g, "-")}`;
             hall = { id: tempId, name: hallName, capacity: 50, color: "blue" };
 
@@ -475,7 +473,7 @@ export default function RosterManager() {
 
         setLoading(true);
 
-        const currentHalls = [...(state.halls || [])];
+        const currentHalls = [...halls];
         for (const hall of newHallsToAdd) {
           try {
             const res = await hrApi.addHall({
@@ -503,9 +501,7 @@ export default function RosterManager() {
         });
 
         if (response.success) {
-          setMessage(
-            `✅ ${response.data?.imported || rosterToImport.length} roster rows imported for ${firstWeekKey || weekKey}!`
-          );
+          setMessage(`✅ ${response.data?.imported || rosterToImport.length} roster rows imported for ${firstWeekKey || weekKey}!`);
           await refreshRoster(firstWeekKey || weekKey);
         } else {
           setMessage("CSV import failed: " + (response.error || "Failed"));
@@ -558,83 +554,79 @@ export default function RosterManager() {
   const resetFilters = () =>
     setFilters({ hallId: "", shift: "", weekOff: "", designation: "" });
 
+  const Field = ({ label, ...props }) => (
+    <div className="space-y-1">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {label}
+      </div>
+      <input
+        {...props}
+        className={`h-9 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#E0222A] ${props.className || ""}`}
+      />
+    </div>
+  );
+
+  const SelectField = ({ label, children, ...props }) => (
+    <div className="space-y-1">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {label}
+      </div>
+      <select
+        {...props}
+        className={`h-9 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#E0222A] ${props.className || ""}`}
+      >
+        {children}
+      </select>
+    </div>
+  );
+
   const FilterPanel = ({ compact = false, onClose = null }) => (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <CalendarDays className="h-4 w-4 text-slate-700" />
-        <input
-          className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
-          value={weekKey}
-          onChange={(e) => setWeekKey(e.target.value)}
-          placeholder="2026-W26"
+    <div className="space-y-3">
+      <Field
+        label="Week Key"
+        value={form.weekKey}
+        onChange={(e) => setForm((p) => ({ ...p, weekKey: e.target.value }))}
+        placeholder="2026-W26"
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <Field
+          label="Week Start"
+          value={form.weekStart}
+          onChange={(e) => setForm((p) => ({ ...p, weekStart: e.target.value }))}
+          placeholder="2026-06-22"
+        />
+        <Field
+          label="Week End"
+          value={form.weekEnd}
+          onChange={(e) => setForm((p) => ({ ...p, weekEnd: e.target.value }))}
+          placeholder="2026-06-28"
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
-          placeholder="Copy from week (e.g. 2026-W25)"
-          value={sourceWeekKey}
-          onChange={(e) => setSourceWeekKey(e.target.value)}
-        />
-        <button
-          type="button"
-          className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
-          onClick={importPreviousWeek}
-          disabled={loading}
-        >
-          <Copy className="h-4 w-4" />
-        </button>
-      </div>
+      <Field
+        label="Copy From"
+        placeholder="2026-W25"
+        value={sourceWeekKey}
+        onChange={(e) => setSourceWeekKey(e.target.value)}
+      />
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="border-2 border-slate-300 bg-white p-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <Users className="h-4 w-4" />
-            Total Rows
-          </div>
-          <div className="mt-2 text-xl font-bold text-slate-900">{stats.total}</div>
-        </div>
-        <div className="border-2 border-slate-300 bg-white p-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <Building2 className="h-4 w-4" />
-            Halls Used
-          </div>
-          <div className="mt-2 text-xl font-bold text-slate-900">{stats.hallsUsed}</div>
-        </div>
-      </div>
-{/* 
-      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">
-        <div className="flex items-center gap-2 font-semibold text-slate-800">
-          <HelpCircle className="h-4 w-4" />
-          CSV Import Help
-        </div>
-        <p className="mt-2">Excel me first row headers exactly ye honi chahiye:</p>
-        <code className="mt-2 block break-all rounded bg-white px-2 py-1">
-          week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
-        </code>
-        <p className="mt-2">Example row:</p>
-        <code className="mt-2 block break-all rounded bg-white px-2 py-1">
-          2026-W26,2026-06-22,2026-06-28,KHUSH RAVI,165990,OPERATOR,Monday,AA,Hall 1
-        </code>
-      </div> */}
-
-      <div className="grid grid-cols-1 gap-2">
-        <select
-          className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
+      <div className="grid grid-cols-2 gap-2">
+        <SelectField
+          label="Hall"
           value={filters.hallId}
           onChange={(e) => setFilters((p) => ({ ...p, hallId: e.target.value }))}
         >
           <option value="">All Halls</option>
-          {state.halls.map((h) => (
+          {halls.map((h) => (
             <option key={h.id} value={h.id}>
               {h.name}
             </option>
           ))}
-        </select>
+        </SelectField>
 
-        <select
-          className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
+        <SelectField
+          label="Shift"
           value={filters.shift}
           onChange={(e) => setFilters((p) => ({ ...p, shift: e.target.value }))}
         >
@@ -644,66 +636,67 @@ export default function RosterManager() {
               {s}
             </option>
           ))}
-        </select>
+        </SelectField>
 
-        <select
-          className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
+        <SelectField
+          label="Week Off"
           value={filters.weekOff}
           onChange={(e) => setFilters((p) => ({ ...p, weekOff: e.target.value }))}
         >
-          <option value="">All Week Off</option>
+          <option value="">All Off</option>
           {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
             <option key={d} value={d}>
               {d}
             </option>
           ))}
-        </select>
+        </SelectField>
 
-        <input
-          className="w-full border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
-          placeholder="Designation filter"
+        <Field
+          label="Designation"
+          placeholder="Operator"
           value={filters.designation}
           onChange={(e) => setFilters((p) => ({ ...p, designation: e.target.value }))}
         />
+      </div>
 
+      <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
+          className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"
           onClick={resetFilters}
         >
-          Reset Filters
+          Reset
+        </button>
+        <button
+          type="button"
+          className="h-9 rounded-xl bg-[#23205C] px-3 text-sm font-semibold text-white"
+          onClick={importPreviousWeek}
+          disabled={loading}
+        >
+          Copy Week
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <button
-          className="border-2 border-white/30 bg-[#23205C] px-4 py-2 text-sm font-semibold text-white hover:bg-[#23205C]/90"
+          className="h-9 rounded-xl bg-[#23205C] px-3 text-sm font-semibold text-white"
           type="button"
           onClick={exportCsv}
         >
           <Download className="mr-1 inline h-4 w-4" />
-          Export CSV
+          CSV
         </button>
         <button
-          className="border-2 border-white/30 bg-[#23205C] px-4 py-2 text-sm font-semibold text-white hover:bg-[#23205C]/90"
+          className="h-9 rounded-xl bg-[#23205C] px-3 text-sm font-semibold text-white"
           type="button"
           onClick={exportExcel}
         >
           <FileSpreadsheet className="mr-1 inline h-4 w-4" />
-          Export Excel
-        </button>
-        <button
-          className="border-2 border-[#E0222A] bg-[#E0222A] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          type="button"
-          onClick={deleteSelectedEmployees}
-          disabled={loading || (!selectedIds.length && !rows.length)}
-        >
-          <Trash className="mr-1 inline h-4 w-4" />
-          Delete
+          Excel
         </button>
       </div>
 
-      <label className="cursor-pointer inline-flex w-full items-center justify-center gap-2 border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700">
+      <label className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700">
         <FileUp className="h-4 w-4" />
         Import CSV
         <input
@@ -714,11 +707,21 @@ export default function RosterManager() {
         />
       </label>
 
+      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">
+        <div className="flex items-center gap-2 font-semibold text-slate-800">
+          <HelpCircle className="h-4 w-4" />
+          CSV Headers
+        </div>
+        <code className="mt-2 block rounded bg-white px-2 py-1 text-[11px]">
+          week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
+        </code>
+      </div>
+
       {!compact && (
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
-            className="w-full border-2 border-slate-300 bg-white px-4 py-3 pl-9 text-slate-900 outline-none focus:border-[#E0222A]"
+            className="h-9 w-full rounded-xl border border-slate-300 bg-white px-3 pl-9 text-sm outline-none focus:border-[#E0222A]"
             placeholder="Search roster"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -730,7 +733,7 @@ export default function RosterManager() {
         <button
           type="button"
           onClick={onClose}
-          className="w-full border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
+          className="h-9 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"
         >
           Close
         </button>
@@ -740,17 +743,17 @@ export default function RosterManager() {
 
   return (
     <div className="overflow-hidden border-2 border-slate-300 bg-white shadow-xl">
-      <div className="border-b border-slate-300 bg-[#23205C] px-5 py-4">
+      <div className="border-b border-slate-300 bg-[#23205C] px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-white">Roster Manager</h2>
-            <p className="mt-1 text-sm text-white/70">Weekly roster master</p>
+            <h2 className="text-lg font-bold text-white">Roster Manager</h2>
+            <p className="mt-0.5 text-xs text-white/70">Weekly roster master</p>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="inline-flex items-center gap-2 border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white md:hidden"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm font-semibold text-white md:hidden"
               onClick={() => setIsFilterOpen(true)}
             >
               <Filter className="h-4 w-4" />
@@ -758,7 +761,7 @@ export default function RosterManager() {
             </button>
             <button
               type="button"
-              className="inline-flex items-center gap-2 border-2 border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm font-semibold text-white"
               onClick={() => setIsHelpOpen(true)}
             >
               <HelpCircle className="h-4 w-4" />
@@ -768,17 +771,17 @@ export default function RosterManager() {
         </div>
       </div>
 
-      <div className="grid gap-0 md:grid-cols-[320px_1fr]">
-        <aside className="hidden border-r border-slate-300 p-4 md:block">
+      <div className="grid gap-0 md:grid-cols-[270px_1fr]">
+        <aside className="hidden border-r border-slate-300 p-3 md:block">
           <FilterPanel />
         </aside>
 
-        <main className="p-4 md:p-5">
-          <div className="mb-4 flex items-center gap-2 md:hidden">
-            <div className="relative flex-1">
+        <main className="p-3 md:p-4">
+          <div className="mb-3 md:hidden">
+            <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                className="w-full border-2 border-slate-300 bg-white px-4 py-3 pl-9 text-slate-900 outline-none focus:border-[#E0222A]"
+                className="h-9 w-full rounded-xl border border-slate-300 bg-white px-3 pl-9 text-sm outline-none focus:border-[#E0222A]"
                 placeholder="Search roster"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -786,27 +789,27 @@ export default function RosterManager() {
             </div>
           </div>
 
-          <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-6">
-            <input
-              className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] md:col-span-2"
-              placeholder="Name"
+          <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <Field
+              label="Name"
+              placeholder="Enter name"
               value={form.name}
               onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
             />
-            <input
-              className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] md:col-span-2"
-              placeholder="Code"
+            <Field
+              label="Code"
+              placeholder="Enter code"
               value={form.code}
               onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))}
             />
-            <input
-              className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] md:col-span-2"
-              placeholder="Designation"
+            <Field
+              label="Designation"
+              placeholder="Operator"
               value={form.designation}
               onChange={(e) => setForm((p) => ({ ...p, designation: e.target.value }))}
             />
-            <select
-              className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
+            <SelectField
+              label="Shift"
               value={form.shift}
               onChange={(e) => setForm((p) => ({ ...p, shift: e.target.value }))}
             >
@@ -815,9 +818,10 @@ export default function RosterManager() {
                   {s}
                 </option>
               ))}
-            </select>
-            <select
-              className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]"
+            </SelectField>
+
+            <SelectField
+              label="Week Off"
               value={form.weekOff}
               onChange={(e) => setForm((p) => ({ ...p, weekOff: e.target.value }))}
             >
@@ -826,56 +830,82 @@ export default function RosterManager() {
                   {d}
                 </option>
               ))}
-            </select>
-            <select
-              className="border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] md:col-span-2"
+            </SelectField>
+
+            <SelectField
+              label="Hall"
               value={form.hallId}
-              onChange={(e) => setForm((p) => ({ ...p, hallId: e.target.value }))}
+              onChange={(e) => {
+                const hall = halls.find((h) => String(h.id) === String(e.target.value));
+                setForm((p) => ({
+                  ...p,
+                  hallId: e.target.value,
+                  hallName: hall?.name || "",
+                }));
+              }}
             >
-              {state.halls.map((h) => (
+              {halls.map((h) => (
                 <option key={h.id} value={h.id}>
                   {h.name} ({h.capacity})
                 </option>
               ))}
-            </select>
-            <button
-              className="bg-[#E0222A] px-4 py-3 font-semibold text-white md:col-span-2 disabled:opacity-50"
-              type="button"
-              onClick={upsertEmp}
-              disabled={loading}
-            >
-              {editingId ? (
-                <Save className="mr-1 inline h-4 w-4" />
-              ) : (
-                <Plus className="mr-1 inline h-4 w-4" />
-              )}
-              {editingId ? "Update Row" : "Add Row"}
-            </button>
-            <button
-              className="border-2 border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 md:col-span-2"
-              type="button"
-              onClick={clearForm}
-            >
-              <X className="mr-1 inline h-4 w-4" />
-              Reset
-            </button>
+            </SelectField>
+
+            <Field
+              label="Week Key"
+              placeholder="2026-W26"
+              value={form.weekKey}
+              onChange={(e) => setForm((p) => ({ ...p, weekKey: e.target.value }))}
+            />
+            <Field
+              label="Week Start"
+              placeholder="2026-06-22"
+              value={form.weekStart}
+              onChange={(e) => setForm((p) => ({ ...p, weekStart: e.target.value }))}
+            />
+            <Field
+              label="Week End"
+              placeholder="2026-06-28"
+              value={form.weekEnd}
+              onChange={(e) => setForm((p) => ({ ...p, weekEnd: e.target.value }))}
+            />
+
+            <div className="flex items-end gap-2 xl:col-span-4">
+              <button
+                className="h-9 flex-1 rounded-xl bg-[#E0222A] px-3 text-sm font-semibold text-white disabled:opacity-50"
+                type="button"
+                onClick={upsertEmp}
+                disabled={loading}
+              >
+                {editingId ? <Save className="mr-1 inline h-4 w-4" /> : <Plus className="mr-1 inline h-4 w-4" />}
+                {editingId ? "Update Row" : "Add Row"}
+              </button>
+              <button
+                className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"
+                type="button"
+                onClick={clearForm}
+              >
+                <X className="mr-1 inline h-4 w-4" />
+                Reset
+              </button>
+            </div>
           </div>
 
           {message && (
-            <div className="mb-5 flex items-center gap-2 border-2 border-[#E0222A] bg-[#E0222A]/10 px-4 py-3 text-sm text-[#E0222A]">
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 text-sm text-[#E0222A]">
               <AlertCircle className="h-4 w-4" />
               {message}
             </div>
           )}
 
           {loading && (
-            <div className="mb-5 flex items-center gap-2 border-2 border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
               <AlertCircle className="h-4 w-4" />
               Processing...
             </div>
           )}
 
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-2 flex items-center gap-2">
             <input
               type="checkbox"
               checked={rows.length > 0 && rows.every((r) => selectedIds.includes(r.id))}
@@ -884,61 +914,59 @@ export default function RosterManager() {
             <span className="text-sm text-slate-700">Select all visible</span>
           </div>
 
-          <div className="overflow-hidden border-2 border-slate-300">
+          <div className="overflow-hidden border border-slate-300">
             <div className="max-h-[560px] overflow-auto">
-              <table className="min-w-[900px] md:min-w-full">
+              <table className="min-w-[980px] md:min-w-full">
                 <thead>
                   <tr>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Select</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Name</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Code</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Designation</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Hall</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Shift</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Week Off</th>
-                    <th className="sticky top-0 border-b-2 border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-700">Action</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Sel</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Week Key</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Start</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">End</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Name</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Code</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Designation</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Hall</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Shift</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Week Off</th>
+                    <th className="sticky top-0 border-b border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700">Act</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.length ? (
                     rows.map((r) => (
                       <tr key={`${r.id}-${r.code}`} className="border-b border-slate-200">
-                        <td className="px-3 py-3 text-sm">
+                        <td className="px-2 py-2 text-sm">
                           <input
                             type="checkbox"
                             checked={selectedIds.includes(r.id)}
                             onChange={() => toggleSelect(r.id)}
                           />
                         </td>
-                        <td className="px-3 py-3 text-sm font-bold text-slate-900">
-                          {r.name}
-                        </td>
-                        <td className="px-3 py-3 text-sm text-slate-700">{r.code}</td>
-                        <td className="px-3 py-3 text-sm text-slate-700">
-                          {r.designation || "-"}
-                        </td>
-                        <td className="px-3 py-3 text-sm">
-                          <span className="border-2 border-slate-300 bg-white px-2 py-1 text-slate-700">
-                            {r.hallName}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-sm text-slate-700">{r.shift}</td>
-                        <td className="px-3 py-3 text-sm text-slate-700">{r.weekOff}</td>
-                        <td className="px-3 py-3 text-sm">
-                          <div className="flex flex-wrap gap-2">
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.week_key || "-"}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.week_start || "-"}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.week_end || "-"}</td>
+                        <td className="px-2 py-2 text-xs font-bold text-slate-900">{r.name}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.code}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.designation || "-"}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.hallName || "-"}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.shift}</td>
+                        <td className="px-2 py-2 text-xs text-slate-700">{r.weekOff}</td>
+                        <td className="px-2 py-2 text-xs">
+                          <div className="flex gap-2">
                             <button
-                              className="border-2 border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700"
+                              className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700"
                               type="button"
                               onClick={() => startEdit(r)}
                             >
-                              <Edit3 className="h-4 w-4" />
+                              <Edit3 className="h-3.5 w-3.5" />
                             </button>
                             <button
-                              className="border-2 border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 font-semibold text-[#E0222A]"
+                              className="rounded-lg border border-[#E0222A] bg-[#E0222A]/10 p-2 text-[#E0222A]"
                               type="button"
                               onClick={() => removeRow(r.id)}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         </td>
@@ -946,7 +974,7 @@ export default function RosterManager() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="8" className="py-12 text-center text-sm text-slate-500">
+                      <td colSpan="11" className="py-12 text-center text-sm text-slate-500">
                         No roster records found.
                       </td>
                     </tr>
@@ -960,10 +988,7 @@ export default function RosterManager() {
 
       {isFilterOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setIsFilterOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/40" onClick={() => setIsFilterOpen(false)} />
           <div className="absolute right-0 top-0 h-full w-[92%] max-w-sm overflow-y-auto bg-white p-4 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900">Filters</h3>
@@ -1002,8 +1027,7 @@ export default function RosterManager() {
             </code>
 
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              Excel me pehle row me headers daalo, neeche data bharo, phir Save As →
-              CSV UTF-8 format me export karo.
+              Excel me pehle row me headers daalo, neeche data bharo, phir Save As → CSV UTF-8 format me export karo.
             </div>
           </div>
         </div>
