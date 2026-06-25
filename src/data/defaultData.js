@@ -5,7 +5,8 @@ export const SHIFT_OPTIONS = [
   { code: 'B', label: 'Shift B', start: '13:00', end: '22:00', hours: 8 },
   { code: 'C', label: 'Shift C', start: '21:00', end: '06:00', hours: 8 },
   { code: 'AA', label: 'Shift AA', start: '07:00', end: '20:00', hours: 12 },
-  { code: 'BB', label: 'Shift BB', start: '19:00', end: '08:00', hours: 12 }
+  { code: 'BB', label: 'Shift BB', start: '19:00', end: '08:00', hours: 12 },
+   { code: 'G', label: 'Shift G', start: '08:00', end: '17:30', hours: 12 }
 ];
 
 export const DEFAULT_HALLS = [
@@ -16,11 +17,11 @@ export const DEFAULT_HALLS = [
 ];
 
 export const DEFAULT_HR_CODES = ['123456', '222222', '654321'];
-export const DEFAULT_USERS = [
-  { username: 'user1', password: 'user123', role: 'USER' },
-  { username: 'hr1', password: 'hr123', role: 'HR' },
-  { username: 'admin1', password: 'admin123', role: 'ADMIN' }
-];
+// export const DEFAULT_USERS = [
+//   { username: 'user1', password: 'user123', role: 'USER' },
+//   { username: 'hr1', password: 'hr123', role: 'HR' },
+//   { username: 'admin1', password: 'admin123', role: 'ADMIN' }
+// ];
 export const DEFAULT_EMPLOYEES = [
  
 ];
