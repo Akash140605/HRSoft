@@ -16,6 +16,7 @@ import {
   CalendarDays,
   Copy,
   Filter,
+  HelpCircle,
 } from "lucide-react";
 import { useHR } from "../context/HRContext";
 import hrApi from "../api/hrApi";
@@ -36,14 +37,12 @@ const normalizeRow = (row, fallbackHall = null) => ({
 
 const getCurrentWeekKey = () => {
   const d = new Date();
-  const target = new Date(d);
-  const dayNr = (d.getDay() + 6) % 7;
-  target.setDate(d.getDate() - dayNr + 3);
-  const firstThursday = new Date(target.getFullYear(), 0, 4);
-  const diff =
-    target - firstThursday + (firstThursday.getDay() + 6) % 7 * 86400000;
-  const week = 1 + Math.round(diff / 604800000);
-  return `${target.getFullYear()}-W${String(week).padStart(2, "0")}`;
+  const utcDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+  return `${utcDate.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 };
 
 const parseCsvLine = (line) => {
@@ -357,7 +356,6 @@ export default function RosterManager() {
 
         const headers = parseCsvLine(lines[0]).map((s) => s.replaceAll('"', "").trim());
         const headersNorm = headers.map((h) => h.trim().toLowerCase());
-
         const findCol = (...names) => headersNorm.findIndex((h) => names.includes(h));
 
         const idxWeekKey = findCol("week_key", "weekkey");
@@ -572,6 +570,25 @@ export default function RosterManager() {
           </div>
           <div className="mt-2 text-xl font-bold text-slate-900">{stats.hallsUsed}</div>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">
+        <div className="flex items-center gap-2 font-semibold text-slate-800">
+          <HelpCircle className="h-4 w-4" />
+          CSV Import Help
+        </div>
+        <p className="mt-2">
+          Excel me first row headers exactly ye honi chahiye:
+        </p>
+        <code className="mt-2 block break-all rounded bg-white px-2 py-1">
+          week_key,week_start,week_end,name,code,designation,weekOff,shift,hallName
+        </code>
+        <p className="mt-2">
+          Example row:
+        </p>
+        <code className="mt-2 block break-all rounded bg-white px-2 py-1">
+          2026-W26,2026-06-22,2026-06-28,KHUSH RAVI,165990,OPERATOR,Monday,AA,Hall 1
+        </code>
       </div>
 
       <div className="flex flex-wrap gap-2">
