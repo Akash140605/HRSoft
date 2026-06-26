@@ -181,6 +181,7 @@ export const addLog = (data) => apiCall("logs", "POST", data);
 
 export const getAttendance = (code) => apiCall(`attendance/${encodeURIComponent(code)}`);
 export const getAllAttendance = () => apiCall("attendance");
+export const getAttendanceTracker = () => apiCall("attendance-tracker");
 
 export const login = (username, password) => authCall("login", "POST", { username, password });
 export const me = () => authCall("me", "GET");
@@ -213,6 +214,7 @@ export default {
   addLog,
   getAttendance,
   getAllAttendance,
+  getAttendanceTracker,
   login,
   me,
   logout,
