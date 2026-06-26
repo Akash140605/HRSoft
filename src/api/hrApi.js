@@ -8,12 +8,8 @@ const DEFAULT_TIMEOUT_MS = 30000;
 
 const getAuthHeaders = () => {
   if (typeof window === "undefined") return {};
-
   const token = localStorage.getItem("hr_token");
-
-  return token
-    ? { Authorization: `Bearer ${token}` }
-    : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
 const buildUrl = (baseUrl, params = {}) => {
@@ -187,6 +183,10 @@ export const login = (username, password) => authCall("login", "POST", { usernam
 export const me = () => authCall("me", "GET");
 export const logout = () => authCall("logout", "POST");
 
+export const processEntry = (data) => apiCall("attendance/process", "POST", data);
+export const hrOverrideEntry = (data) => apiCall("attendance/hr-override", "POST", data);
+export const moveEmployeeToHall = (data) => apiCall("attendance/hr-transfer", "POST", data);
+
 export default {
   getEmployees,
   getEmployeeByCode,
@@ -218,4 +218,7 @@ export default {
   login,
   me,
   logout,
+  processEntry,
+  hrOverrideEntry,
+  moveEmployeeToHall,
 };

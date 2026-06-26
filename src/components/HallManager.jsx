@@ -36,19 +36,29 @@ const normalizeHall = (hall) => ({
   color: hall.color || "blue",
 });
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const dateKey = (v) => String(v || "").slice(0, 10);
+
 export default function HallManager() {
   const { state, setState, hallUsage, SHIFT_OPTIONS, activeEntries } = useHR();
   const [openHallId, setOpenHallId] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [drafts, setDrafts] = useState({});
+  const [selectedDate, setSelectedDate] = useState(todayISO());
 
   const fetchHalls = useCallback(async () => {
     setLoading(true);
     try {
       const res = await hrApi.getHalls();
-      if (res.success) {
-        const halls = Array.isArray(res.data) ? res.data.map(normalizeHall) : [];
+      if (res?.success) {
+        const hallsRaw = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data?.items)
+          ? res.data.items
+          : Array.isArray(res.data?.halls)
+          ? res.data.halls
+          : [];
+        const halls = hallsRaw.map(normalizeHall);
         setState((prev) => ({ ...prev, halls }));
       }
     } finally {
@@ -58,7 +68,7 @@ export default function HallManager() {
 
   useEffect(() => {
     fetchHalls();
-  }, [fetchHalls, refreshKey]);
+  }, [fetchHalls]);
 
   useEffect(() => {
     const map = {};
@@ -72,54 +82,80 @@ export default function HallManager() {
     setDrafts(map);
   }, [state.halls]);
 
+  const selectedEntries = useMemo(() => {
+    const rows = Array.isArray(state.entries) ? state.entries : [];
+    return rows.filter((e) => dateKey(e.date || e.at) === selectedDate);
+  }, [state.entries, selectedDate]);
+
+  const isWeekOff = useCallback((emp, dateStr) => {
+    const day = new Date(dateStr).toLocaleDateString("en-US", { weekday: "long" });
+    return String(emp.weekOff || emp.week_off || "").trim().toLowerCase() === day.trim().toLowerCase();
+  }, []);
+
   const hallSummary = useMemo(() => {
-const rosterCountMap = new Map();
+    const roster = Array.isArray(state.roster) ? state.roster : [];
+    const entries = selectedEntries;
 
-(state.roster || []).forEach((e) => {
-  const key = String(e.hallId || e.hall_id || "");
-  rosterCountMap.set(key, (rosterCountMap.get(key) || 0) + 1);
-});
+    const rosterMap = new Map();
+    roster.forEach((e) => {
+      const hallId = String(e.hallId || e.hall_id || "").trim();
+      const shift = String(e.shift || "A").trim();
+      const key = `${hallId}__${shift}`;
+      const arr = rosterMap.get(key) || [];
+      arr.push(e);
+      rosterMap.set(key, arr);
+    });
 
-    const usageMap = new Map((hallUsage || []).map((h) => [String(h.id), h]));
+    const entryMap = new Map();
+    entries.forEach((e) => {
+      const hallId = String(e.hallId || e.hall_id || "").trim();
+      const shift = String(e.shift || "A").trim();
+      const key = `${hallId}__${shift}`;
+      const arr = entryMap.get(key) || [];
+      arr.push(e);
+      entryMap.set(key, arr);
+    });
 
-    return (state.halls || []).map((h) => {
-      const rosterAssigned = rosterCountMap.get(String(h.id)) || 0;
-      const usage = usageMap.get(String(h.id)) || {};
+    return (state.halls || []).map((hall) => {
+      const shiftDetails = {};
+      let effectiveCapacity = 0;
+      let used = 0;
+
+      SHIFT_OPTIONS.forEach((shift) => {
+        const rosterForShift = (rosterMap.get(`${String(hall.id).trim()}__${shift.code}`) || []);
+        const shiftCapacity = rosterForShift.filter((emp) => !isWeekOff(emp, selectedDate)).length;
+
+        const usedForShift = (entryMap.get(`${String(hall.id).trim()}__${shift.code}`) || []).length;
+
+        shiftDetails[shift.code] = {
+          capacity: shiftCapacity,
+          used: usedForShift,
+          remaining: Math.max(0, shiftCapacity - usedForShift),
+          full: usedForShift >= shiftCapacity && shiftCapacity > 0,
+        };
+
+        effectiveCapacity += shiftCapacity;
+        used += usedForShift;
+      });
+
+      const rosterAssigned = roster.filter(
+        (e) => String(e.hallId || e.hall_id).trim() === String(hall.id).trim()
+      ).length;
+
       return {
-        ...h,
-        ...usage,
+        ...hall,
+        used,
         rosterAssigned,
-        effectiveCapacity: Math.max(Number(h.capacity || 0), rosterAssigned),
+        effectiveCapacity,
+        remaining: Math.max(0, effectiveCapacity - used),
+        full: used >= effectiveCapacity && effectiveCapacity > 0,
+        shiftDetails,
       };
     });
-  }, [hallUsage, state.halls, state.employees]);
-
-  const entriesForSelectedDate = activeEntries || [];
-
-  const shiftSummary = useMemo(() => {
-    return SHIFT_OPTIONS.map((shift) => {
-      const count = entriesForSelectedDate.filter((entry) => entry.shift === shift.code).length;
-      return { ...shift, count };
-    });
-  }, [SHIFT_OPTIONS, entriesForSelectedDate]);
-
-  const hallShiftBreakdown = useMemo(() => {
-    return hallSummary.map((hall) => {
-      const counts = {};
-      SHIFT_OPTIONS.forEach((s) => {
-        counts[s.code] = entriesForSelectedDate.filter(
-          (e) => String(e.hallId || e.hall_id) === String(hall.id) && e.shift === s.code
-        ).length;
-      });
-      return { hallId: hall.id, counts };
-    });
-  }, [hallSummary, SHIFT_OPTIONS, entriesForSelectedDate]);
+  }, [state.halls, state.roster, selectedEntries, SHIFT_OPTIONS, selectedDate, isWeekOff]);
 
   const totalUsed = hallSummary.reduce((sum, hall) => sum + Number(hall.used || 0), 0);
-  const totalCapacity = hallSummary.reduce(
-    (sum, hall) => sum + Number(hall.effectiveCapacity || hall.capacity || 0),
-    0
-  );
+  const totalCapacity = hallSummary.reduce((sum, hall) => sum + Number(hall.effectiveCapacity || 0), 0);
   const totalOccupancy = totalCapacity > 0 ? Math.round((totalUsed / totalCapacity) * 100) : 0;
 
   const handleToggle = (hallId) => {
@@ -150,19 +186,18 @@ const rosterCountMap = new Map();
     setLoading(true);
     try {
       const res = await hrApi.updateHall(hallId, payload);
-      if (res.success) {
+      if (res?.success) {
         setState((prev) => ({
           ...prev,
           halls: prev.halls.map((h) =>
             String(h.id) === String(hallId) ? { ...h, ...payload } : h
           ),
         }));
-        setRefreshKey((k) => k + 1);
       } else {
-        alert(res.error || "Hall update failed");
+        alert(res?.error || "Hall update failed");
       }
     } catch (error) {
-      alert(error.message || "Hall update failed");
+      alert(error?.message || "Hall update failed");
     } finally {
       setLoading(false);
     }
@@ -177,9 +212,11 @@ const rosterCountMap = new Map();
               <Building2 className="h-3.5 w-3.5" />
               Hall setup
             </div>
-            <h2 className="mt-3 text-xl font-black tracking-tight sm:text-2xl">Hall Manager</h2>
+            <h2 className="mt-3 text-xl font-black tracking-tight sm:text-2xl">
+              Hall Manager
+            </h2>
             <p className="mt-2 max-w-2xl text-sm text-white/80">
-              Roster-based hall capacity, live occupancy, and shift-wise breakdown.
+              Roster-based effective capacity is calculated hall + shift wise, and week off employees are excluded.
             </p>
           </div>
         </div>
@@ -192,7 +229,9 @@ const rosterCountMap = new Map();
               <Building2 className="h-4 w-4" />
             </div>
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total halls</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Total halls
+              </div>
               <div className="text-xl font-bold text-slate-900">{hallSummary.length}</div>
             </div>
           </div>
@@ -204,7 +243,9 @@ const rosterCountMap = new Map();
               <Users2 className="h-4 w-4" />
             </div>
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Used seats</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Used seats
+              </div>
               <div className="text-xl font-bold text-slate-900">{totalUsed}</div>
             </div>
           </div>
@@ -216,8 +257,15 @@ const rosterCountMap = new Map();
               <CalendarRange className="h-4 w-4" />
             </div>
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected date</div>
-              <div className="text-xl font-bold text-slate-900">Today</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Selected date
+              </div>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="mt-1 rounded border border-slate-300 px-2 py-1 text-sm outline-none"
+              />
             </div>
           </div>
         </div>
@@ -228,14 +276,18 @@ const rosterCountMap = new Map();
               <Palette className="h-4 w-4" />
             </div>
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Theme</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Theme
+              </div>
               <div className="text-xl font-bold text-slate-900">Dual tone</div>
             </div>
           </div>
         </div>
 
         <div className="border-2 border-[#23205C]/10 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Occupancy</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Occupancy
+          </div>
           <div className="mt-1 text-xl font-bold text-slate-900">{totalOccupancy}%</div>
           <div className="mt-2 h-2 overflow-hidden bg-slate-200">
             <div className="h-full bg-[#23205C]" style={{ width: `${totalOccupancy}%` }} />
@@ -245,18 +297,6 @@ const rosterCountMap = new Map();
 
       <div className="max-h-[78vh] overflow-y-auto p-5">
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {shiftSummary.map((shift) => (
-              <div key={shift.code} className="border-2 border-slate-200 bg-white p-4 shadow-sm">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{shift.label}</div>
-                <div className="mt-1 text-xl font-bold text-slate-900">{shift.count}</div>
-                <div className="text-xs text-slate-500">
-                  {shift.start} - {shift.end}
-                </div>
-              </div>
-            ))}
-          </div>
-
           {hallSummary.length ? (
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {hallSummary.map((hall, index) => {
@@ -269,7 +309,6 @@ const rosterCountMap = new Map();
                 const isOpen = openHallId === hall.id;
                 const accent = accentMap[hall.color] || accentMap.blue;
                 const styleClass = isOpen ? `${accent.border} ${accent.ring} shadow-lg` : "border-slate-200 shadow-sm";
-                const shiftBreakdown = hallShiftBreakdown.find((x) => String(x.hallId) === String(hall.id))?.counts || {};
                 const draft = drafts[hall.id] || {};
 
                 return (
@@ -287,7 +326,9 @@ const rosterCountMap = new Map();
                                 Hall #{index + 1}
                               </span>
                             </div>
-                            <div className="mt-1 text-xs text-slate-500">Click to manage hall details</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              Click to manage hall details
+                            </div>
                           </div>
                         </div>
 
@@ -296,7 +337,9 @@ const rosterCountMap = new Map();
                             <div className="text-sm font-bold text-slate-900">
                               Used {used} / {effectiveCapacity}
                             </div>
-                            <div className="text-xs text-slate-500">Roster {rosterAssigned} assigned</div>
+                            <div className="text-xs text-slate-500">
+                              Roster {rosterAssigned} assigned
+                            </div>
                           </div>
                           {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                         </div>
@@ -318,18 +361,25 @@ const rosterCountMap = new Map();
                       </div>
 
                       <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                        {SHIFT_OPTIONS.map((shift) => (
-                          <div key={shift.code} className="border border-slate-200 bg-slate-50 px-2 py-2 text-center">
-                            <div className="font-semibold text-slate-700">{shift.code}</div>
-                            <div className="text-slate-500">{shiftBreakdown[shift.code] || 0}</div>
-                          </div>
-                        ))}
+                        {SHIFT_OPTIONS.map((shift) => {
+                          const info = hall.shiftDetails?.[shift.code] || { capacity: 0, used: 0, remaining: 0 };
+                          return (
+                            <div key={shift.code} className="border border-slate-200 bg-slate-50 px-2 py-2 text-center">
+                              <div className="font-semibold text-slate-700">{shift.code}</div>
+                              <div className="text-slate-500">
+                                {info.used}/{info.capacity}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
 
                       {isOpen && (
                         <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-200 pt-4 sm:grid-cols-3 xl:grid-cols-4">
                           <div>
-                            <label className="mb-1 block text-xs font-medium text-slate-600">Hall name</label>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Hall name
+                            </label>
                             <input
                               value={draft.name ?? ""}
                               onChange={(e) => patchDraft(hall.id, { name: e.target.value })}
@@ -340,7 +390,9 @@ const rosterCountMap = new Map();
                           </div>
 
                           <div>
-                            <label className="mb-1 block text-xs font-medium text-slate-600">Base capacity</label>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Base capacity
+                            </label>
                             <input
                               type="number"
                               min="0"
@@ -353,7 +405,9 @@ const rosterCountMap = new Map();
                           </div>
 
                           <div>
-                            <label className="mb-1 block text-xs font-medium text-slate-600">Color</label>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Color
+                            </label>
                             <select
                               value={draft.color || "blue"}
                               onChange={(e) => patchDraft(hall.id, { color: e.target.value })}
@@ -374,7 +428,9 @@ const rosterCountMap = new Map();
                               onClick={() => saveHall(hall.id)}
                               disabled={loading}
                               className={`flex w-full items-center justify-center gap-2 border-2 px-4 py-2 text-sm font-semibold ${
-                                loading ? "border-slate-200 bg-slate-100 text-slate-400" : "border-[#23205C] bg-[#23205C] text-white"
+                                loading
+                                  ? "border-slate-200 bg-slate-100 text-slate-400"
+                                  : "border-[#23205C] bg-[#23205C] text-white"
                               }`}
                             >
                               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

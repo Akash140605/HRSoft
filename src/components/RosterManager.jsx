@@ -1,26 +1,15 @@
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-  useCallback
-} from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   FileUp,
   Plus,
-  Search,
   Trash2,
   Edit3,
   Save,
-  FileSpreadsheet,
   X,
   AlertCircle,
   Copy,
   Filter,
   HelpCircle,
-  Download,
-  Trash,
-  Building2,
-  Users,
 } from "lucide-react";
 import { useHR } from "../context/HRContext";
 import hrApi from "../api/hrApi";
@@ -210,20 +199,28 @@ export default function RosterManager() {
     setLoading(true);
     try {
       const res = await hrApi.getRoster(wk);
-      if (res.success) {
-        const list = Array.isArray(res.data) ? res.data.map((r) => normalizeRow(r)) : [];
+      if (res?.success) {
+        const raw = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data?.items)
+          ? res.data.items
+          : Array.isArray(res.data?.roster)
+          ? res.data.roster
+          : [];
+        const list = raw.map((r) => normalizeRow(r));
         setState((prev) => ({ ...prev, roster: list }));
       } else {
-        setMessage(res.error || "Roster load failed.");
+        setMessage(res?.error || "Roster load failed.");
       }
+      return res;
     } finally {
       setLoading(false);
     }
-}, [weekKey, setState]);
+  }, [weekKey, setState]);
 
   useEffect(() => {
-  refreshRoster(weekKey);
-}, [weekKey, refreshRoster]);
+    refreshRoster(weekKey);
+  }, [weekKey, refreshRoster]);
 
   const toggleSelect = (id) => {
     setSelectedIds((prev) =>
@@ -265,7 +262,6 @@ export default function RosterManager() {
       setSelectedIds([]);
       setEditingId(null);
       clearForm();
-
       setMessage(
         successCount === targetIds.length
           ? `✅ ${successCount} roster rows deleted successfully!`
@@ -305,7 +301,7 @@ export default function RosterManager() {
         ? await hrApi.updateRosterRow(editingId, rosterData)
         : await hrApi.addRosterRow(rosterData);
 
-      if (response.success) {
+      if (response?.success) {
         const returned = normalizeRow(
           {
             ...(response.data || {}),
@@ -321,7 +317,7 @@ export default function RosterManager() {
         setState((prev) => {
           const nextRoster = editingId
             ? prev.roster.map((e) => (String(e.id) === String(editingId) ? returned : e))
-           : [returned, ...prev.roster];
+            : [returned, ...prev.roster];
           return { ...prev, roster: nextRoster };
         });
 
@@ -329,7 +325,7 @@ export default function RosterManager() {
         setEditingId(null);
         clearForm();
       } else {
-        setMessage("Error: " + (response.error || "Save failed"));
+        setMessage("Error: " + (response?.error || "Save failed"));
       }
     } catch (error) {
       setMessage("Failed: " + error.message);
@@ -366,7 +362,7 @@ export default function RosterManager() {
     setLoading(true);
     try {
       const response = await hrApi.deleteRosterRow(id);
-      if (response.success) {
+      if (response?.success) {
         setState((prev) => ({
           ...prev,
           roster: prev.roster.filter((e) => String(e.id) !== String(id)),
@@ -374,7 +370,7 @@ export default function RosterManager() {
         setSelectedIds((prev) => prev.filter((x) => String(x) !== String(id)));
         setMessage("Roster row deleted!");
       } else {
-        setMessage("Delete Error: " + (response.error || "Failed"));
+        setMessage("Delete Error: " + (response?.error || "Failed"));
       }
     } catch (error) {
       setMessage("Failed to delete: " + error.message);
@@ -488,11 +484,12 @@ export default function RosterManager() {
             const hallName =
               String(hallNameRaw || "").trim() ||
               `Hall ${halls.length + newHallsToAdd.length + 1}`;
-         if (!res.success) {
-  setMessage(`Hall ${hall.name} create failed`);
-  return;
-}
-            hall = { id: tempId, name: hallName, capacity: 50, color: "blue" };
+            hall = {
+              id: `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+              name: hallName,
+              capacity: 50,
+              color: "blue",
+            };
 
             const alreadyQueued = newHallsToAdd.some(
               (h) => normalizeText(h.name) === normalizeText(hall.name)
@@ -531,7 +528,7 @@ export default function RosterManager() {
               capacity: hall.capacity,
               color: hall.color,
             });
-            if (res.success && res.data) currentHalls.push(res.data);
+            if (res?.success && res?.data) currentHalls.push(res.data);
             else currentHalls.push(hall);
           } catch {
             currentHalls.push(hall);
@@ -552,13 +549,13 @@ export default function RosterManager() {
 
         const response = await hrApi.bulkImportRoster(payload);
 
-        if (response.success) {
+        if (response?.success) {
           setMessage(
             `✅ ${response.data?.imported || rosterToImport.length} roster rows imported for ${firstWeekKey || weekKey}!`
           );
           await refreshRoster(firstWeekKey || weekKey);
         } else {
-          setMessage("CSV import failed: " + (response.error || "Failed"));
+          setMessage("CSV import failed: " + (response?.error || "Failed"));
         }
       } catch (error) {
         setMessage("CSV import failed: " + error.message);
@@ -583,11 +580,11 @@ export default function RosterManager() {
         source_week_key: sourceWeekKey.trim(),
       });
 
-      if (response.success) {
+      if (response?.success) {
         setMessage(`✅ ${sourceWeekKey} se ${weekKey} me roster copied.`);
         await refreshRoster(weekKey);
       } else {
-        setMessage("Import failed: " + (response.error || "Failed"));
+        setMessage("Import failed: " + (response?.error || "Failed"));
       }
     } catch (error) {
       setMessage("Import failed: " + error.message);
@@ -607,7 +604,6 @@ export default function RosterManager() {
             <h2 className="text-lg font-bold text-white">Roster Manager</h2>
             <p className="mt-0.5 text-xs text-white/70">Weekly roster master</p>
           </div>
-
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -738,7 +734,7 @@ export default function RosterManager() {
           </div>
         </aside>
 
-        <main className="p-3 md:p-4 min-w-0">
+        <main className="min-w-0 p-3 md:p-4">
           <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
             <Field
               label="Name"
@@ -834,11 +830,7 @@ export default function RosterManager() {
                 onClick={upsertEmp}
                 disabled={loading}
               >
-                {editingId ? (
-                  <Save className="mr-1 inline h-4 w-4" />
-                ) : (
-                  <Plus className="mr-1 inline h-4 w-4" />
-                )}
+                {editingId ? <Save className="mr-1 inline h-4 w-4" /> : <Plus className="mr-1 inline h-4 w-4" />}
                 {editingId ? "Update Row" : "Add Row"}
               </button>
               <button
@@ -916,7 +908,6 @@ export default function RosterManager() {
                         <td className="px-2 py-2 text-xs text-slate-700">{r.week_key || "-"}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.week_start || "-"}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.week_end || "-"}</td>
-                        
                         <td className="px-2 py-2 text-xs font-bold text-slate-900">{r.name}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.code}</td>
                         <td className="px-2 py-2 text-xs text-slate-700">{r.designation || "-"}</td>

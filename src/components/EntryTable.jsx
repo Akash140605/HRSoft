@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Download,
   Search,
@@ -27,10 +27,7 @@ const normalizeEntry = (entry) => ({
   date: entry.date || "",
   time: entry.time || "",
   day: entry.day || "",
-  weekOff:
- entry.week_off ||
- entry.weekOff ||
- "Sunday",
+  weekOff: entry.week_off || entry.weekOff || "Sunday",
 });
 
 const toTime = (dateStr, endOfDay = false) => {
@@ -52,28 +49,21 @@ export default function EntryTable() {
   const [hallFilter, setHallFilter] = useState("");
   const [shiftFilter, setShiftFilter] = useState("");
   const [reasonFilter, setReasonFilter] = useState("");
-const [moveHallId, setMoveHallId] = useState("");
+  const [moveHallId, setMoveHallId] = useState("");
   const [moveCode, setMoveCode] = useState("");
- useEffect(() => {
- if (!moveHallId && state.halls.length) {
-   setMoveHallId(state.halls[0].id);
- }
-}, [state.halls]);
   const [moveReason, setMoveReason] = useState("");
-
   const [selectedRow, setSelectedRow] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
 
-useEffect(() => {
-  refreshAfterWrite();
-}, [refreshKey]);
+  useEffect(() => {
+    if (!moveHallId && state.halls?.length) {
+      setMoveHallId(String(state.halls[0].id));
+    }
+  }, [state.halls, moveHallId]);
+
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-  const base = (Array.isArray(state.entries)
-  ? state.entries
-  : []
-).map(normalizeEntry);
+    const base = (Array.isArray(state.entries) ? state.entries : []).map(normalizeEntry);
 
     const fromTime = toTime(dateFrom, false);
     const toTimeValue = toTime(dateTo, true);
@@ -101,7 +91,8 @@ useEffect(() => {
       const shiftOk = !shiftFilter || String(r.shift || "") === shiftFilter;
 
       const reasonText = String(r.overrideReason || "").toLowerCase();
-      const reasonOk = !reasonFilter || reasonText.includes(reasonFilter.trim().toLowerCase());
+      const reasonOk =
+        !reasonFilter || reasonText.includes(reasonFilter.trim().toLowerCase());
 
       const rowTime = toTime(r.date, false);
       const dateOk =
@@ -181,14 +172,14 @@ useEffect(() => {
     setLoading(true);
     try {
       const res = await hrApi.deleteEntry(id);
-      if (res.success) {
+      if (res?.success) {
         setState((prev) => ({
           ...prev,
           entries: prev.entries.filter((x) => String(x.id) !== String(id)),
         }));
         if (String(selectedRow) === String(id)) setSelectedRow(null);
       } else {
-        alert(res.error || "Delete failed");
+        alert(res?.error || "Delete failed");
       }
     } finally {
       setLoading(false);
@@ -209,13 +200,12 @@ useEffect(() => {
         reason: moveReason.trim(),
       });
 
-      alert(res.text || (res.ok ? "Moved successfully" : "Failed"));
+      alert(res?.text || (res?.ok ? "Moved successfully" : "Failed"));
 
-      if (res.ok) {
+      if (res?.ok) {
         setMoveCode("");
         setMoveReason("");
-        setRefreshKey((k) => k + 1);
-   
+        await refreshAfterWrite();
       }
     } finally {
       setLoading(false);
@@ -232,7 +222,20 @@ useEffect(() => {
     setReasonFilter("");
   };
 
-  const refresh = () => setRefreshKey((k) => k + 1);
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      await refreshAfterWrite();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!moveHallId && state.halls.length) {
+      setMoveHallId(String(state.halls[0].id));
+    }
+  }, [state.halls, moveHallId]);
 
   const mobileRows = rows;
 
@@ -295,36 +298,17 @@ useEffect(() => {
             />
           </div>
 
-          <input
-            type="date"
-            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-          />
+          <input type="date" className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <input type="date" className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
 
-          <input
-            type="date"
-            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-          />
-
-          <select
-            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value)}
-          >
+          <select className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
             <option value="">All sources</option>
             <option value="SCAN">SCAN</option>
             <option value="HR_OVERRIDE">HR_OVERRIDE</option>
             <option value="HR_TRANSFER">HR_TRANSFER</option>
           </select>
 
-          <select
-            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={hallFilter}
-            onChange={(e) => setHallFilter(e.target.value)}
-          >
+          <select className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]" value={hallFilter} onChange={(e) => setHallFilter(e.target.value)}>
             <option value="">All halls</option>
             {state.halls.map((h) => (
               <option key={h.id} value={h.id}>
@@ -333,11 +317,7 @@ useEffect(() => {
             ))}
           </select>
 
-          <select
-            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={shiftFilter}
-            onChange={(e) => setShiftFilter(e.target.value)}
-          >
+          <select className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]" value={shiftFilter} onChange={(e) => setShiftFilter(e.target.value)}>
             <option value="">All shifts</option>
             <option value="A">A</option>
             <option value="B">B</option>
@@ -346,25 +326,11 @@ useEffect(() => {
             <option value="BB">BB</option>
           </select>
 
-          <input
-            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
-            value={reasonFilter}
-            onChange={(e) => setReasonFilter(e.target.value)}
-            placeholder="Filter by reason"
-          />
+          <input className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] md:col-span-2" value={reasonFilter} onChange={(e) => setReasonFilter(e.target.value)} placeholder="Filter by reason" />
 
-          <input
-            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={moveCode}
-            onChange={(e) => setMoveCode(e.target.value)}
-            placeholder="Employee code for transfer"
-          />
+          <input className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]" value={moveCode} onChange={(e) => setMoveCode(e.target.value)} placeholder="Employee code for transfer" />
 
-          <select
-            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10"
-            value={moveHallId}
-            onChange={(e) => setMoveHallId(e.target.value)}
-          >
+          <select className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A]" value={moveHallId} onChange={(e) => setMoveHallId(e.target.value)}>
             {state.halls.map((h) => (
               <option key={h.id} value={h.id}>
                 {h.name}
@@ -372,24 +338,15 @@ useEffect(() => {
             ))}
           </select>
 
-          <input
-            className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] focus:ring-4 focus:ring-[#E0222A]/10 md:col-span-2"
-            value={moveReason}
-            onChange={(e) => setMoveReason(e.target.value)}
-            placeholder="Reason for hall move"
-          />
+          <input className="rounded border-2 border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-[#E0222A] md:col-span-2" value={moveReason} onChange={(e) => setMoveReason(e.target.value)} placeholder="Reason for hall move" />
 
           <button
-            className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 md:col-span-2"
+            className="bg-[#E0222A] px-4 py-3 font-semibold text-white shadow-lg shadow-[#E0222A]/25 disabled:opacity-50 md:col-span-2"
             type="button"
             onClick={onMove}
             disabled={loading}
           >
-            {loading ? (
-              <Loader2 className="mr-1 inline h-4 w-4 animate-spin" />
-            ) : (
-              <ShieldAlert className="mr-1 inline h-4 w-4" />
-            )}
+            {loading ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <ShieldAlert className="mr-1 inline h-4 w-4" />}
             HR Move
           </button>
         </div>
@@ -483,25 +440,13 @@ useEffect(() => {
                       <td className="px-3 py-3 text-sm text-slate-500">{r.overrideReason || "-"}</td>
                       <td className="px-3 py-3 text-sm">
                         <div className="flex gap-2">
-                          <button
-                            className="border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
-                            type="button"
-                            onClick={() => copyRow(r)}
-                          >
+                          <button className="border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700" type="button" onClick={() => copyRow(r)}>
                             <Copy className="h-4 w-4" />
                           </button>
-                          <button
-                            className="border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
-                            type="button"
-                            onClick={() => setSelectedRow(r.id)}
-                          >
+                          <button className="border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700" type="button" onClick={() => setSelectedRow(r.id)}>
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button
-                            className="border border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 font-semibold text-[#E0222A] hover:bg-[#E0222A]/20"
-                            onClick={() => removeEntry(r.id)}
-                            type="button"
-                          >
+                          <button className="border border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 font-semibold text-[#E0222A]" onClick={() => removeEntry(r.id)} type="button">
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
@@ -533,9 +478,7 @@ useEffect(() => {
                     <div className="text-xs text-slate-500">
                       {String(r.date).slice(0, 10)} • {r.day} • {r.time}
                     </div>
-                    <div className="mt-1 text-sm font-bold text-slate-900">
-                      {r.name}
-                    </div>
+                    <div className="mt-1 text-sm font-bold text-slate-900">{r.name}</div>
                     <div className="text-xs text-slate-700">
                       {r.code} • {r.designation || "-"} • {r.shift || "-"}
                     </div>
@@ -556,32 +499,18 @@ useEffect(() => {
                   </div>
                 </div>
 
-                <div className="mt-2 text-xs text-slate-500">
-                  {r.overrideReason || "-"}
-                </div>
+                <div className="mt-2 text-xs text-slate-500">{r.overrideReason || "-"}</div>
 
                 <div className="mt-3 flex gap-2">
-                  <button
-                    className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                    type="button"
-                    onClick={() => copyRow(r)}
-                  >
+                  <button className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700" type="button" onClick={() => copyRow(r)}>
                     <Copy className="mr-1 inline h-4 w-4" />
                     Copy
                   </button>
-                  <button
-                    className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                    type="button"
-                    onClick={() => setSelectedRow(r.id)}
-                  >
+                  <button className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700" type="button" onClick={() => setSelectedRow(r.id)}>
                     <Eye className="mr-1 inline h-4 w-4" />
                     View
                   </button>
-                  <button
-                    className="flex-1 rounded border border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 text-sm font-semibold text-[#E0222A]"
-                    onClick={() => removeEntry(r.id)}
-                    type="button"
-                  >
+                  <button className="flex-1 rounded border border-[#E0222A] bg-[#E0222A]/10 px-3 py-2 text-sm font-semibold text-[#E0222A]" onClick={() => removeEntry(r.id)} type="button">
                     <Trash2 className="mr-1 inline h-4 w-4" />
                     Delete
                   </button>
