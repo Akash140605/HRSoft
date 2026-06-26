@@ -122,6 +122,7 @@ export function HRProvider({ children }) {
     const saved = safeParse(localStorage.getItem(STORAGE_KEY), null);
     return saved ? { ...createInitialState(), ...saved } : createInitialState();
   });
+
   const [activeDate, setActiveDate] = useState(dateKey(new Date().toISOString()));
 
   const updateState = useCallback((updater) => {
@@ -186,12 +187,15 @@ export function HRProvider({ children }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        selectedDate: state.selectedDate,
-        currentUser: state.currentUser,
-        currentRole: state.currentRole,
-        currentHrCode: state.currentHrCode,
-      }));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          selectedDate: state.selectedDate,
+          currentUser: state.currentUser,
+          currentRole: state.currentRole,
+          currentHrCode: state.currentHrCode,
+        })
+      );
     } catch (err) {
       console.error(err);
     }
@@ -223,7 +227,12 @@ export function HRProvider({ children }) {
 
   const hallUsage = useMemo(() => state.halls.map((hall) => {
     const used = activeEntries.filter((e) => String(e.hallId || e.hall_id).trim() === String(hall.id).trim()).length;
-    return { ...hall, used, remaining: Math.max(0, Number(hall.capacity || 0) - used), full: used >= Number(hall.capacity || 0) };
+    return {
+      ...hall,
+      used,
+      remaining: Math.max(0, Number(hall.capacity || 0) - used),
+      full: used >= Number(hall.capacity || 0),
+    };
   }), [state.halls, activeEntries]);
 
   const totals = useMemo(() => ({
@@ -268,7 +277,12 @@ export function HRProvider({ children }) {
     const token = res?.data?.token || "";
     const user = res?.data?.user || null;
     if (token) localStorage.setItem("hr_token", token);
-    setState((prev) => ({ ...prev, currentUser: user, currentRole: user?.role || "GUEST", currentHrCode: user?.role === "HR" || user?.role === "ADMIN" ? user?.username || "" : "" }));
+    setState((prev) => ({
+      ...prev,
+      currentUser: user,
+      currentRole: user?.role || "GUEST",
+      currentHrCode: user?.role === "HR" || user?.role === "ADMIN" ? user?.username || "" : "",
+    }));
     return { ok: true, message: "Login successful", role: user?.role || "GUEST" };
   }, []);
 
@@ -279,10 +293,24 @@ export function HRProvider({ children }) {
   }, []);
 
   const pushLog = useCallback(async (row) => {
-    const normalized = { type: row.type || "", message: row.message || "", by: row.by || "", employee_code: row.employeeCode || "", hall_id: row.hallId || "", hall_name: row.hallName || "", override_reason: row.overrideReason || "", at: row.at || new Date().toISOString() };
+    const normalized = {
+      type: row.type || "",
+      message: row.message || "",
+      by: row.by || "",
+      employee_code: row.employeeCode || "",
+      hall_id: row.hallId || "",
+      hall_name: row.hallName || "",
+      override_reason: row.overrideReason || "",
+      at: row.at || new Date().toISOString(),
+    };
     const res = await hrApi.addLog(normalized);
     const localRow = { ...makeLogRow(row.type, row.message, row), ...row };
-    setState((prev) => ({ ...prev, logs: res?.success ? [makeLogRow(row.type, row.message, { ...row, id: res.data?.id || localRow.id }), ...prev.logs] : [localRow, ...prev.logs] }));
+    setState((prev) => ({
+      ...prev,
+      logs: res?.success
+        ? [makeLogRow(row.type, row.message, { ...row, id: res.data?.id || localRow.id }), ...prev.logs]
+        : [localRow, ...prev.logs],
+    }));
     return res;
   }, []);
 
@@ -348,12 +376,40 @@ export function HRProvider({ children }) {
     }
 
     const hall = getNextHallForEmployee(emp);
-    const payload = { code: emp.code, name: emp.name, designation: emp.designation || "", week_off: emp.weekOff, shift: emp.shift, hall_id: hall?.id || "", hall_name: hall?.name || "", source: "SCAN", hr_code: "", hr_action: "", override_reason: "" };
+    const payload = {
+      code: emp.code,
+      name: emp.name,
+      designation: emp.designation || "",
+      week_off: emp.weekOff,
+      shift: emp.shift,
+      hall_id: hall?.id || "",
+      hall_name: hall?.name || "",
+      source: "SCAN",
+      hr_code: "",
+      hr_action: "",
+      override_reason: "",
+    };
+
     const apiRes = await hrApi.addEntry(payload);
     if (!apiRes?.success) return { ok: false, text: apiRes?.error || "Failed to save entry", type: "error" };
 
-    const newEntry = normalizeEntry({ id: apiRes.data?.id, ...payload, date: state.selectedDate, time: new Date().toLocaleTimeString(), day: dayName(state.selectedDate) });
-    await pushLog({ type: "SCAN", message: `${emp.name} -> ${hall?.name || "-"}`, by: state.currentUser?.username || "", employeeCode: emp.code, hallId: hall?.id || "", hallName: hall?.name || "" });
+    const newEntry = normalizeEntry({
+      id: apiRes.data?.id,
+      ...payload,
+      date: state.selectedDate,
+      time: new Date().toLocaleTimeString(),
+      day: dayName(state.selectedDate),
+    });
+
+    await pushLog({
+      type: "SCAN",
+      message: `${emp.name} -> ${hall?.name || "-"}`,
+      by: state.currentUser?.username || "",
+      employeeCode: emp.code,
+      hallId: hall?.id || "",
+      hallName: hall?.name || "",
+    });
+
     await refreshAfterWrite();
     return { ok: true, entry: newEntry, text: `${emp.name} saved in ${hall?.name || "-"}.` };
   }, [activeEntries, employeeMap, rosterMap, getNextHallForEmployee, isInShift, pushLog, refreshAfterWrite, state.currentUser?.username, state.selectedDate]);
@@ -371,11 +427,34 @@ export function HRProvider({ children }) {
     const outOfShift = !isInShift(hhmm, emp.shift);
     const reasonTag = `${String(reason || "")}${isWeekOff ? " | WEEK_OFF" : ""}${outOfShift ? " | OUT_OF_SHIFT" : ""}`;
 
-    const payload = { code: emp.code, name: emp.name, designation: emp.designation || "", week_off: emp.weekOff, shift: emp.shift, hall_id: hall.id, hall_name: hall.name, source: "HR_OVERRIDE", hr_code: state.currentUser?.username || "", hr_action: "FORCE_ENTRY", override_reason: reasonTag };
+    const payload = {
+      code: emp.code,
+      name: emp.name,
+      designation: emp.designation || "",
+      week_off: emp.weekOff,
+      shift: emp.shift,
+      hall_id: hall.id,
+      hall_name: hall.name,
+      source: "HR_OVERRIDE",
+      hr_code: state.currentUser?.username || "",
+      hr_action: "FORCE_ENTRY",
+      override_reason: reasonTag,
+    };
+
     const apiRes = await hrApi.addEntry(payload);
     if (!apiRes?.success) return { ok: false, text: apiRes?.error || "Failed", type: "error" };
+
     const newEntry = normalizeEntry(apiRes.data);
-    await pushLog({ type: "HR_OVERRIDE", message: `${emp.name} -> ${hall.name} | ${reasonTag}`, by: state.currentUser?.username || "", employeeCode: emp.code, hallId: hall.id, hallName: hall.name, overrideReason: reasonTag });
+    await pushLog({
+      type: "HR_OVERRIDE",
+      message: `${emp.name} -> ${hall.name} | ${reasonTag}`,
+      by: state.currentUser?.username || "",
+      employeeCode: emp.code,
+      hallId: hall.id,
+      hallName: hall.name,
+      overrideReason: reasonTag,
+    });
+
     await refreshAfterWrite();
     return { ok: true, entry: newEntry, text: `HR override saved for ${emp.name}.` };
   }, [canOverride, employeeMap, rosterMap, isInShift, pushLog, refreshAfterWrite, state.currentUser?.username, state.selectedDate, state.halls]);
@@ -393,11 +472,33 @@ export function HRProvider({ children }) {
     const outOfShift = !isInShift(hhmm, emp.shift);
     const reasonTag = `${String(reason || "")}${isWeekOff ? " | WEEK_OFF" : ""}${outOfShift ? " | OUT_OF_SHIFT" : ""}`;
 
-    const payload = { code: emp.code, name: emp.name, designation: emp.designation || "", week_off: emp.weekOff, shift: emp.shift, hall_id: hall.id, hall_name: hall.name, source: "HR_TRANSFER", hr_code: state.currentUser?.username || "", hr_action: "MOVE_TO_OTHER_HALL", override_reason: reasonTag };
+    const payload = {
+      code: emp.code,
+      name: emp.name,
+      designation: emp.designation || "",
+      week_off: emp.weekOff,
+      shift: emp.shift,
+      hall_id: hall.id,
+      hall_name: hall.name,
+      source: "HR_TRANSFER",
+      hr_code: state.currentUser?.username || "",
+      hr_action: "MOVE_TO_OTHER_HALL",
+      override_reason: reasonTag,
+    };
+
     const apiRes = await hrApi.addEntry(payload);
     if (!apiRes?.success) return { ok: false, text: apiRes?.error || "Failed", type: "error" };
 
-    await pushLog({ type: "HR_TRANSFER", message: `${emp.name} -> ${hall.name} | ${reasonTag}`, by: state.currentUser?.username || "", employeeCode: emp.code, hallId: hall.id, hallName: hall.name, overrideReason: reasonTag });
+    await pushLog({
+      type: "HR_TRANSFER",
+      message: `${emp.name} -> ${hall.name} | ${reasonTag}`,
+      by: state.currentUser?.username || "",
+      employeeCode: emp.code,
+      hallId: hall.id,
+      hallName: hall.name,
+      overrideReason: reasonTag,
+    });
+
     await deleteOldScanEntriesByCode(emp.code);
     await refreshAfterWrite();
     return { ok: true, text: `${emp.name} moved to ${hall.name}.` };
