@@ -22,29 +22,34 @@ function DashboardApp() {
   const showHallManager = role === "HR" || role === "ADMIN";
   const isGuest = role === "GUEST";
 
-  useEffect(() => {
-    if (isGuest) {
-      setActiveTab("scanner");
-    } else {
-      setGuestTrainingOpen(false);
-    }
-  }, [isGuest]);
+const tabs = useMemo(() => {
+  const base = [
+    { key: "scanner", label: "Scanner" },
+    { key: "training", label: "Training" },
+  ];
 
-  const tabs = useMemo(() => {
-    const base = [
-      { key: "scanner", label: "Scanner" },
-      { key: "training", label: "Training" },
-    ];
+  if (showEntryTable) base.push({ key: "entries", label: "Entries" });
+  if (showRoster) base.push({ key: "roster", label: "Roster" });
+  if (showHallManager) base.push({ key: "hall", label: "Hall" });
+  if (showTracker) base.push({ key: "tracker", label: "Tracker" });
+  if (showHRLogs) base.push({ key: "logs", label: "Logs" });
 
-    if (showEntryTable) base.push({ key: "entries", label: "Entries" });
-    if (showRoster) base.push({ key: "roster", label: "Roster" });
-    if (showHallManager) base.push({ key: "hall", label: "Hall" });
-    if (showTracker) base.push({ key: "tracker", label: "Tracker" });
-    if (showHRLogs) base.push({ key: "logs", label: "Logs" });
+  return base;
+}, [
+  showEntryTable,
+  showHRLogs,
+  showRoster,
+  showTracker,
+  showHallManager,
+]);
 
-    return base;
-  }, [showEntryTable, showHRLogs, showRoster, showTracker, showHallManager]);
-
+useEffect(() => {
+  if (isGuest) {
+    setActiveTab("scanner");
+  } else {
+    setGuestTrainingOpen(false);
+  }
+}, [isGuest]);
   const renderTab = () => {
     switch (activeTab) {
       case "training":

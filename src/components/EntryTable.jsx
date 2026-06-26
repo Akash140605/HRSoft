@@ -27,6 +27,10 @@ const normalizeEntry = (entry) => ({
   date: entry.date || "",
   time: entry.time || "",
   day: entry.day || "",
+  weekOff:
+ entry.week_off ||
+ entry.weekOff ||
+ "Sunday",
 });
 
 const toTime = (dateStr, endOfDay = false) => {
@@ -50,37 +54,27 @@ export default function EntryTable() {
   const [reasonFilter, setReasonFilter] = useState("");
 
   const [moveCode, setMoveCode] = useState("");
-  const [moveHallId, setMoveHallId] = useState("H1");
+ useEffect(() => {
+ if (!moveHallId && state.halls.length) {
+   setMoveHallId(state.halls[0].id);
+ }
+}, [state.halls]);
   const [moveReason, setMoveReason] = useState("");
 
   const [selectedRow, setSelectedRow] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchEntries = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await hrApi.getEntries();
-      if (res.success) {
-        const rawEntries = Array.isArray(res.data) ? res.data : [];
-        const mappedEntries = rawEntries.map(normalizeEntry);
-        setState((prev) => ({
-          ...prev,
-          entries: mappedEntries,
-        }));
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [setState]);
-
-  useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries, refreshKey]);
-
+useEffect(() => {
+  refreshAfterWrite();
+}, [refreshKey]);
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const base = Array.isArray(state.entries) ? state.entries.map(normalizeEntry) : [];
+  const base = (Array.isArray(state.entries)
+  ? state.entries
+  : []
+).map(normalizeEntry);
+
     const fromTime = toTime(dateFrom, false);
     const toTimeValue = toTime(dateTo, true);
 
@@ -221,7 +215,7 @@ export default function EntryTable() {
         setMoveCode("");
         setMoveReason("");
         setRefreshKey((k) => k + 1);
-        await refreshAfterWrite();
+   
       }
     } finally {
       setLoading(false);

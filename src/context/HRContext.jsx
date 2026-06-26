@@ -137,21 +137,33 @@ export function HRProvider({ children }) {
 
   const fetchAllDataFromAPI = useCallback(async () => {
     try {
-      const [
-        employeesRes,
-        hallsRes,
-        entriesRes,
-        logsRes,
-        trackerRes,
-        rosterRes,
-      ] = await Promise.all([
-        hrApi.getEmployees(),
-        hrApi.getHalls(),
-        hrApi.getEntries(),
-        hrApi.getLogs(),
-        hrApi.getAllAttendance(),
-      hrApi.getRoster(currentWeekKey()),
-      ]);
+    const results = await Promise.allSettled([
+  hrApi.getEmployees(),
+  hrApi.getHalls(),
+  hrApi.getEntries(),
+  hrApi.getLogs(),
+  // hrApi.getAllAttendance(),
+  hrApi.getRoster(),
+]);
+
+const employeesRes =
+  results[0].status === "fulfilled" ? results[0].value : null;
+
+const hallsRes =
+  results[1].status === "fulfilled" ? results[1].value : null;
+
+const entriesRes =
+  results[2].status === "fulfilled" ? results[2].value : null;
+
+const logsRes =
+  results[3].status === "fulfilled" ? results[3].value : null;
+
+const trackerRes = { success: true, data: [] };
+
+const rosterRes =
+  results[4]?.status === "fulfilled"
+    ? results[4].value
+    : null;
       const rosterRaw = rosterRes?.success
         ? getArray(rosterRes.data ?? rosterRes)
         : [];
@@ -215,8 +227,7 @@ export function HRProvider({ children }) {
           attendanceTracker,
         };
       });
-      console.log("ROSTER RAW =", rosterRaw);
-console.log("ROSTER COUNT =", rosterRaw.length);
+  
     } catch (error) {
       console.error("Failed to fetch data from API:", error);
     }
@@ -226,13 +237,28 @@ console.log("ROSTER COUNT =", rosterRaw.length);
     fetchAllDataFromAPI();
   }, [fetchAllDataFromAPI]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
-  }, [state]);
+ useEffect(() => {
+  if (typeof window === "undefined") return;
 
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        selectedDate: state.selectedDate,
+        currentUser: state.currentUser,
+        currentRole: state.currentRole,
+        currentHrCode: state.currentHrCode,
+      })
+    );
+  } catch (err) {
+    console.error(err);
+  }
+}, [
+  state.selectedDate,
+  state.currentUser,
+  state.currentRole,
+  state.currentHrCode,
+]);
   const resetAll = useCallback(() => {
     const fresh = createInitialState();
     setState(fresh);
@@ -252,29 +278,33 @@ console.log("ROSTER COUNT =", rosterRaw.length);
     [state.roster],
   );
 
-  const activeEntries = useMemo(
-    () =>
-      (Array.isArray(state.entries) ? state.entries : []).filter(
-        (e) => dateKey(e.date || e.at) === state.selectedDate,
-      ),
-    [state.entries, state.selectedDate],
-  );
+const activeEntries = useMemo(
+  () =>
+    (Array.isArray(state.entries) ? state.entries : []).filter(
+      (e) => dateKey(e.date || e.at) === state.selectedDate,
+    ),
+  [state.entries, state.selectedDate],
+);
 
-  const hallUsage = useMemo(() => {
-    return state.halls.map((hall) => {
-      const used = activeEntries.filter(
-        (e) => String(e.hallId || e.hall_id) === String(hall.id),
-      ).length;
 
-      return {
-        ...hall,
-        used,
-        remaining: Math.max(0, Number(hall.capacity || 0) - used),
-        full: used >= Number(hall.capacity || 0),
-      };
-    });
-  }, [state.halls, activeEntries]);
+const hallUsage = useMemo(() => {
+  return state.halls.map((hall) => {
 
+  const used = activeEntries.filter(
+  (e) =>
+    String(e.hallId || e.hall_id).trim() ===
+    String(hall.id).trim()
+).length;
+
+
+    return {
+      ...hall,
+      used,
+      remaining: Math.max(0, Number(hall.capacity || 0) - used),
+      full: used >= Number(hall.capacity || 0),
+    };
+  });
+}, [state.halls, activeEntries]);
   const totals = useMemo(
     () => ({
       totalCapacity: state.halls.reduce(
@@ -324,9 +354,11 @@ console.log("ROSTER COUNT =", rosterRaw.length);
 
   const getNextHallForEmployee = useCallback(
     (employee, entries = activeEntries, halls = state.halls) => {
-      const preferred = halls.find(
-        (h) => String(h.id) === String(employee.hallId),
-      );
+   const preferred = halls.find(
+  (h) =>
+   String(h.id).trim() ===
+String(employee.hallId || employee.hall_id || "").trim()
+);
       if (preferred) {
         const used = entries.filter(
           (e) => String(e.hallId || e.hall_id) === String(preferred.id),
@@ -427,7 +459,7 @@ console.log("ROSTER COUNT =", rosterRaw.length);
   }, [fetchAllDataFromAPI]);
 
   const refreshRoster = useCallback(
-    async (weekKey = "") => {
+   async (weekKey = currentWeekKey())=> {
       const res = await hrApi.getRoster(weekKey);
       if (!res?.success) return res;
       const fallbackHall = state.halls?.[0] || null;
@@ -485,18 +517,10 @@ console.log("ROSTER COUNT =", rosterRaw.length);
       );
 
       if (!oldScans.length) return;
-
-      setState((prev) => ({
-        ...prev,
-        entries: prev.entries.filter(
-          (e) =>
-            !(
-              String(e.code).trim() === String(code).trim() &&
-              String(e.source || "") === "SCAN"
-            ),
-        ),
-      }));
-
+setState(prev => ({
+  ...prev,
+  entries: [newEntry, ...prev.entries]
+}));
       await Promise.allSettled(
         oldScans.map((entry) =>
           entry.id != null ? hrApi.deleteEntry(entry.id) : Promise.resolve(),
@@ -557,14 +581,7 @@ console.log("ROSTER COUNT =", rosterRaw.length);
       }
 
       const hall = getNextHallForEmployee(emp);
-      console.log("EMP =", emp);
-      console.log("EMP HALL =", emp.hallId);
-      console.log("SELECTED HALL =", hall);
-      console.log("ACTIVE ENTRIES =", activeEntries.length);
-      console.log("TODAY", todayDay);
-console.log("EMP", emp);
-console.log("EMP WEEKOFF", emp.weekOff);
-console.log("HALL", hall);
+      
       const payload = {
         code: emp.code,
         name: emp.name,
@@ -683,16 +700,16 @@ console.log("HALL", hall);
         text: `HR override saved for ${emp.name}.`,
       };
     },
- [
- activeEntries,
+[
+ canOverride,
  employeeMap,
  rosterMap,
- getNextHallForEmployee,
  isInShift,
  pushLog,
  refreshAfterWrite,
  state.currentUser?.username,
- state.selectedDate
+ state.selectedDate,
+ state.halls
 ]
   );
 

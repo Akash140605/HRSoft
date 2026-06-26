@@ -174,13 +174,14 @@ export default function ScannerPanel() {
 
   const isHR = state.currentRole === "HR" || state.currentRole === "ADMIN";
 
-  const empResult = useMemo(
-    () =>
-      state.employees.find(
-        (e) => String(e.code).trim() === String(code).trim()
-      ),
-    [code, state.employees]
+ const empResult = useMemo(() => {
+  const c = String(code).trim();
+
+  return (
+    state.roster.find((e) => String(e.code).trim() === c) ||
+    state.employees.find((e) => String(e.code).trim() === c)
   );
+}, [code, state.roster, state.employees]);
 
   const recentRows = useMemo(() => {
     const mapped = (Array.isArray(activeEntries) ? activeEntries : []).map(
@@ -404,11 +405,12 @@ const handleScannedCode = async (val) => {
     setMobileScannerOpen(true);
   };
 
-  const closeScanner = () => {
-    setMobileScannerOpen(false);
-    setScannerPaused(false);
-    hardClearCode();
-  };
+const closeScanner = () => {
+  setMobileScannerOpen(false);
+  setScannerPaused(false);
+  setBusy(false);
+  hardClearCode();
+};
 
   return (
     <div ref={topAnchorRef} className="min-h-dvh w-full overflow-hidden bg-slate-100">
@@ -765,14 +767,7 @@ const handleScannedCode = async (val) => {
             </div>
 
             <div className="mt-2 flex gap-2">
-              <button
-                className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                type="button"
-                onClick={() => onProcess()}
-                disabled={busy || scannerPaused}
-              >
-                Verify
-              </button>
+            
               <button
                 className="flex-1 rounded bg-[#E0222A] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 type="button"

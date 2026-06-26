@@ -73,11 +73,12 @@ export default function HallManager() {
   }, [state.halls]);
 
   const hallSummary = useMemo(() => {
-    const rosterCountMap = new Map();
-    (state.employees || []).forEach((e) => {
-      const key = String(e.hallId || e.hall_id || "");
-      rosterCountMap.set(key, (rosterCountMap.get(key) || 0) + 1);
-    });
+const rosterCountMap = new Map();
+
+(state.roster || []).forEach((e) => {
+  const key = String(e.hallId || e.hall_id || "");
+  rosterCountMap.set(key, (rosterCountMap.get(key) || 0) + 1);
+});
 
     const usageMap = new Map((hallUsage || []).map((h) => [String(h.id), h]));
 

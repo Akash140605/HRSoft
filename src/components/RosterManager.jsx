@@ -201,7 +201,7 @@ export default function RosterManager() {
     });
   };
 
-  const refreshRoster = async (wk = weekKey) => {
+  const refreshRoster = useCallback(async (wk = weekKey) => {
     setLoading(true);
     try {
       const res = await hrApi.getRoster(wk);
@@ -214,11 +214,11 @@ export default function RosterManager() {
     } finally {
       setLoading(false);
     }
-  };
+}, [weekKey, setState]);
 
   useEffect(() => {
-    refreshRoster(weekKey);
-  }, [weekKey]);
+  refreshRoster(weekKey);
+}, [weekKey, refreshRoster]);
 
   const toggleSelect = (id) => {
     setSelectedIds((prev) =>
@@ -316,7 +316,7 @@ export default function RosterManager() {
         setState((prev) => {
           const nextRoster = editingId
             ? prev.roster.map((e) => (String(e.id) === String(editingId) ? returned : e))
-            : [returned, ...prev.roster.filter((e) => String(e.code) !== String(returned.code))];
+           : [returned, ...prev.roster];
           return { ...prev, roster: nextRoster };
         });
 
@@ -483,7 +483,10 @@ export default function RosterManager() {
             const hallName =
               String(hallNameRaw || "").trim() ||
               `Hall ${halls.length + newHallsToAdd.length + 1}`;
-            const tempId = `temp-${hallName.toLowerCase().replace(/\s+/g, "-")}`;
+         if (!res.success) {
+  setMessage(`Hall ${hall.name} create failed`);
+  return;
+}
             hall = { id: tempId, name: hallName, capacity: 50, color: "blue" };
 
             const alreadyQueued = newHallsToAdd.some(

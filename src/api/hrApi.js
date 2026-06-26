@@ -7,8 +7,13 @@ const AUTH_BASE_URL =
 const DEFAULT_TIMEOUT_MS = 30000;
 
 const getAuthHeaders = () => {
+  if (typeof window === "undefined") return {};
+
   const token = localStorage.getItem("hr_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
+
+  return token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
 };
 
 const buildUrl = (baseUrl, params = {}) => {
@@ -121,8 +126,11 @@ export const bulkImportEmployees = (data) =>
     employees: Array.isArray(data?.employees) ? data.employees.map(normalizeEmployeePayload) : [],
   });
 
-export const getRoster = (weekKey, hallId = "") =>
-  apiCall("roster", "GET", null, { week_key: weekKey, hall_id: hallId });
+export const getRoster = (weekKey = "", hallId = "") =>
+  apiCall("roster", "GET", null, {
+    ...(weekKey ? { week_key: weekKey } : {}),
+    ...(hallId ? { hall_id: hallId } : {}),
+  });
 
 export const addRosterRow = (data) =>
   apiCall("roster", "POST", {
