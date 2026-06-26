@@ -259,7 +259,8 @@ function ConsoleLine({ text, tone = "default" }) {
 function ConsoleWindow({ title, lines }) {
   const endRef = useRef(null);
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    endRef.current?.scrollIntoView({
+      behavior: "smooth" });
   }, [lines]);
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 shadow-sm">
@@ -669,8 +670,7 @@ function EVAPSFlow() {
             Yahan approvals, visitor tracking, aur status timeline clean animated cards ke through show hoga.
           </p>
           <div className="mt-5 grid gap-3">
-            {[
-              ["Approval Queue", "Pending requests with faster checks."],
+            {[     ["Approval Queue", "Pending requests with faster checks."],
               ["Visitor Flow", "Simple guided step-by-step movement."],
               ["Status Timeline", "Live updates with motion cards."],
             ].map(([a, b]) => (
@@ -873,7 +873,7 @@ function LoginAccessPanel({
             <button
               onClick={onLogin}
               disabled={loginBusy}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2b275d] px-4 py-3 text-[15px] font-bold text-white shadow-lg shadow-[#2b275d]/20 transition hover:scale-[1.01] hover:bg-[#342f73] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl  bg-[#2b275d] px-4 py-3 text-[15px] font-bold text-white shadow-lg shadow-[#2b275d]/20 transition hover:scale-[1.01] hover:bg-[#342f73] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loginBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {loginBusy ? "Signing in..." : `Login as ${role}`}
