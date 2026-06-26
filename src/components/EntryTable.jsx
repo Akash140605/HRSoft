@@ -52,7 +52,7 @@ export default function EntryTable() {
   const [hallFilter, setHallFilter] = useState("");
   const [shiftFilter, setShiftFilter] = useState("");
   const [reasonFilter, setReasonFilter] = useState("");
-
+const [moveHallId, setMoveHallId] = useState("");
   const [moveCode, setMoveCode] = useState("");
  useEffect(() => {
  if (!moveHallId && state.halls.length) {
