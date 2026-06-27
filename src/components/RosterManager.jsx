@@ -302,17 +302,27 @@ export default function RosterManager() {
         : await hrApi.addRosterRow(rosterData);
 
       if (response?.success) {
-        const returned = normalizeRow(
-          {
-            ...(response.data || {}),
-            hallId: rosterData.hall_id,
-            hallName: rosterData.hall_name,
-            week_key: rosterData.week_key,
-            week_start: rosterData.week_start,
-            week_end: rosterData.week_end,
-          },
-          hall
-        );
+       const returned = normalizeRow(
+{
+  id: response?.data?.id || Date.now(),
+
+  week_key: rosterData.week_key,
+  week_start: rosterData.week_start,
+  week_end: rosterData.week_end,
+
+  code: rosterData.code,
+  name: rosterData.name,
+  designation: rosterData.designation,
+
+  week_off: rosterData.week_off,
+  shift: rosterData.shift,
+
+  hall_id: rosterData.hall_id,
+  hall_name: rosterData.hall_name,
+},
+hall
+);
+      
 
         setState((prev) => {
           const nextRoster = editingId
