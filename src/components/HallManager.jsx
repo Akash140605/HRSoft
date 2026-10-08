@@ -1,0 +1,521 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Building2,
+  Users2,
+  CalendarRange,
+  ChevronDown,
+  ChevronUp,
+  Palette,
+  Loader2,
+  Save,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
+import { useHR } from "../context/HRContext";
+import hrApi from "../api/hrApi";
+
+const colorMap = {
+  teal: "bg-teal-500",
+  blue: "bg-blue-500",
+  violet: "bg-violet-500",
+  amber: "bg-amber-500",
+  slate: "bg-slate-500",
+};
+
+const accentMap = {
+  teal: { ring: "ring-teal-500/20", border: "border-teal-500", soft: "bg-teal-50 text-teal-700" },
+  blue: { ring: "ring-[#23205C]/15", border: "border-[#23205C]", soft: "bg-[#23205C]/5 text-[#23205C]" },
+  violet: { ring: "ring-violet-500/20", border: "border-violet-500", soft: "bg-violet-50 text-violet-700" },
+  amber: { ring: "ring-amber-500/20", border: "border-amber-500", soft: "bg-amber-50 text-amber-700" },
+  slate: { ring: "ring-slate-400/20", border: "border-slate-500", soft: "bg-slate-100 text-slate-700" },
+};
+
+const normalizeHall = (hall) => ({
+  ...hall,
+  id: hall.id,
+  name: hall.name || "",
+  capacity: Number(hall.capacity || 0),
+  color: hall.color || "blue",
+});
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const dateKey = (v) => String(v || "").slice(0, 10);
+
+export default function HallManager() {
+  const { state, setState, hallUsage, SHIFT_OPTIONS, activeEntries } = useHR();
+  const [openHallId, setOpenHallId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [savingHallId, setSavingHallId] = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const [selectedDate, setSelectedDate] = useState(todayISO());
+  const [message, setMessage] = useState(null); // { type: "error" | "success", text }
+
+  const notify = (type, text) => setMessage({ type, text });
+
+  useEffect(() => {
+    if (!message) return;
+    const t = setTimeout(() => setMessage(null), 5000);
+    return () => clearTimeout(t);
+  }, [message]);
+
+  const fetchHalls = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await hrApi.getHalls();
+      if (res?.success) {
+        const hallsRaw = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data?.items)
+          ? res.data.items
+          : Array.isArray(res.data?.halls)
+          ? res.data.halls
+          : [];
+        const halls = hallsRaw.map(normalizeHall);
+        setState((prev) => ({ ...prev, halls }));
+      } else {
+        notify("error", res?.error || "Could not load halls.");
+      }
+    } catch (error) {
+      notify("error", error?.message || "Could not load halls.");
+    } finally {
+      setLoading(false);
+    }
+  }, [setState]);
+
+  useEffect(() => {
+    fetchHalls();
+  }, [fetchHalls]);
+
+  useEffect(() => {
+    const map = {};
+    (state.halls || []).forEach((h) => {
+      map[h.id] = {
+        name: h.name || "",
+        capacity: Number(h.capacity || 0),
+        color: h.color || "blue",
+      };
+    });
+    setDrafts(map);
+  }, [state.halls]);
+
+  const selectedEntries = useMemo(() => {
+    const rows = Array.isArray(state.entries) ? state.entries : [];
+    return rows.filter((e) => dateKey(e.date || e.at) === selectedDate);
+  }, [state.entries, selectedDate]);
+
+  const isWeekOff = useCallback((emp, dateStr) => {
+    const day = new Date(dateStr).toLocaleDateString("en-US", { weekday: "long" });
+    return String(emp.weekOff || emp.week_off || "").trim().toLowerCase() === day.trim().toLowerCase();
+  }, []);
+
+  const hallSummary = useMemo(() => {
+    const roster = Array.isArray(state.roster) ? state.roster : [];
+    const entries = selectedEntries;
+
+    const rosterMap = new Map();
+    roster.forEach((e) => {
+      const hallId = String(e.hallId || e.hall_id || "").trim();
+      const shift = String(e.shift || "A").trim();
+      const key = `${hallId}__${shift}`;
+      const arr = rosterMap.get(key) || [];
+      arr.push(e);
+      rosterMap.set(key, arr);
+    });
+
+    const entryMap = new Map();
+    entries.forEach((e) => {
+      const hallId = String(e.hallId || e.hall_id || "").trim();
+      const shift = String(e.shift || "A").trim();
+      const key = `${hallId}__${shift}`;
+      const arr = entryMap.get(key) || [];
+      arr.push(e);
+      entryMap.set(key, arr);
+    });
+
+    return (state.halls || []).map((hall) => {
+      const shiftDetails = {};
+      let effectiveCapacity = 0;
+      let used = 0;
+
+      SHIFT_OPTIONS.forEach((shift) => {
+        const rosterForShift = (rosterMap.get(`${String(hall.id).trim()}__${shift.code}`) || []);
+        const shiftCapacity = rosterForShift.filter((emp) => !isWeekOff(emp, selectedDate)).length;
+
+        const usedForShift = (entryMap.get(`${String(hall.id).trim()}__${shift.code}`) || []).length;
+
+        shiftDetails[shift.code] = {
+          capacity: shiftCapacity,
+          used: usedForShift,
+          remaining: Math.max(0, shiftCapacity - usedForShift),
+          full: usedForShift >= shiftCapacity && shiftCapacity > 0,
+        };
+
+        effectiveCapacity += shiftCapacity;
+        used += usedForShift;
+      });
+
+      const rosterAssigned = roster.filter(
+        (e) => String(e.hallId || e.hall_id).trim() === String(hall.id).trim()
+      ).length;
+
+      return {
+        ...hall,
+        used,
+        rosterAssigned,
+        effectiveCapacity,
+        remaining: Math.max(0, effectiveCapacity - used),
+        full: used >= effectiveCapacity && effectiveCapacity > 0,
+        shiftDetails,
+      };
+    });
+  }, [state.halls, state.roster, selectedEntries, SHIFT_OPTIONS, selectedDate, isWeekOff]);
+
+  const totalUsed = hallSummary.reduce((sum, hall) => sum + Number(hall.used || 0), 0);
+  const totalCapacity = hallSummary.reduce((sum, hall) => sum + Number(hall.effectiveCapacity || 0), 0);
+  const totalOccupancy = totalCapacity > 0 ? Math.round((totalUsed / totalCapacity) * 100) : 0;
+
+  const handleToggle = (hallId) => {
+    setOpenHallId((prev) => (prev === hallId ? null : hallId));
+  };
+
+  const patchDraft = (hallId, updates) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [hallId]: {
+        ...(prev[hallId] || {}),
+        ...updates,
+      },
+    }));
+  };
+
+  const isDraftDirty = (hall) => {
+    const draft = drafts[hall.id];
+    if (!draft) return false;
+    return (
+      (draft.name ?? "") !== (hall.name ?? "") ||
+      Number(draft.capacity ?? 0) !== Number(hall.capacity ?? 0) ||
+      (draft.color ?? "blue") !== (hall.color ?? "blue")
+    );
+  };
+
+  const saveHall = async (hallId) => {
+    const current = state.halls.find((h) => String(h.id) === String(hallId));
+    const draft = drafts[hallId];
+    if (!current || !draft) return;
+
+    if (!draft.name?.trim()) {
+      notify("error", "Hall name can't be empty.");
+      return;
+    }
+
+    const payload = {
+      name: draft.name?.trim() ?? current.name ?? "",
+      capacity: Number(draft.capacity ?? current.capacity ?? 0),
+      color: draft.color ?? current.color ?? "blue",
+    };
+
+    setSavingHallId(hallId);
+    try {
+      const res = await hrApi.updateHall(hallId, payload);
+      if (res?.success) {
+        setState((prev) => ({
+          ...prev,
+          halls: prev.halls.map((h) =>
+            String(h.id) === String(hallId) ? { ...h, ...payload } : h
+          ),
+        }));
+        notify("success", `${payload.name} updated successfully.`);
+      } else {
+        notify("error", res?.error || "Hall update failed.");
+      }
+    } catch (error) {
+      notify("error", error?.message || "Hall update failed.");
+    } finally {
+      setSavingHallId(null);
+    }
+  };
+
+  return (
+    <div className="overflow-hidden rounded-2xl border-2 border-slate-200 bg-white shadow-xl">
+      <div className="border-b border-slate-200 bg-gradient-to-r from-[#23205C] to-[#E0222A] px-5 py-4 text-white">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-white/90">
+              <Building2 className="h-3.5 w-3.5" />
+              Hall setup
+            </div>
+            <h2 className="mt-3 text-xl font-black tracking-tight sm:text-2xl">
+              Hall Manager
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-white/80">
+              Roster-based effective capacity is calculated per hall and per shift, and employees on their
+              week off are excluded automatically.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {message && (
+        <div
+          className={`mx-5 mt-4 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+            message.type === "success"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+              : "border-[#E0222A] bg-[#E0222A]/10 text-[#E0222A]"
+          }`}
+        >
+          {message.type === "success" ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+          ) : (
+            <AlertCircle className="h-4 w-4 shrink-0" />
+          )}
+          {message.text}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 border-b border-slate-200 bg-slate-50 p-5 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="rounded-lg border-2 border-[#23205C]/10 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg border border-[#23205C]/10 bg-[#23205C]/5 p-2 text-[#23205C]">
+              <Building2 className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Total halls
+              </div>
+              <div className="text-xl font-bold text-slate-900">{hallSummary.length}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border-2 border-emerald-500/10 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-emerald-700">
+              <Users2 className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Used seats
+              </div>
+              <div className="text-xl font-bold text-slate-900">{totalUsed}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border-2 border-amber-500/10 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-700">
+              <CalendarRange className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Selected date
+              </div>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="mt-1 rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border-2 border-[#E0222A]/10 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg border border-[#E0222A]/20 bg-[#E0222A]/5 p-2 text-[#E0222A]">
+              <Palette className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Theme
+              </div>
+              <div className="text-xl font-bold text-slate-900">Dual tone</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border-2 border-[#23205C]/10 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Occupancy
+          </div>
+          <div className="mt-1 text-xl font-bold text-slate-900">{totalOccupancy}%</div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className={`h-full rounded-full transition-all ${totalOccupancy >= 100 ? "bg-[#E0222A]" : "bg-[#23205C]"}`}
+              style={{ width: `${Math.min(100, totalOccupancy)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="max-h-[78vh] overflow-y-auto p-5">
+        <div className="space-y-4">
+          {loading && !hallSummary.length ? (
+            <div className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white p-8 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading halls…
+            </div>
+          ) : hallSummary.length ? (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {hallSummary.map((hall, index) => {
+                const capacity = Number(hall.capacity ?? 0);
+                const used = Number(hall.used ?? 0);
+                const rosterAssigned = Number(hall.rosterAssigned ?? 0);
+                const effectiveCapacity = Number(hall.effectiveCapacity ?? capacity);
+                const percentage = effectiveCapacity > 0 ? Math.min((used / effectiveCapacity) * 100, 100) : 0;
+                const hallName = hall.name || `Hall ${index + 1}`;
+                const isOpen = openHallId === hall.id;
+                const accent = accentMap[hall.color] || accentMap.blue;
+                const styleClass = isOpen ? `${accent.border} ${accent.ring} shadow-lg` : "border-slate-200 shadow-sm";
+                const draft = drafts[hall.id] || {};
+                const dirty = isDraftDirty(hall);
+                const isSaving = savingHallId === hall.id;
+
+                return (
+                  <div key={hall.id} className={`overflow-hidden rounded-xl border-2 bg-white transition ${styleClass}`}>
+                    <button type="button" onClick={() => handleToggle(hall.id)} className="w-full text-left">
+                      <div className="flex items-center justify-between gap-3 bg-gradient-to-r from-white to-slate-50 px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-lg border-2 border-[#23205C]/10 bg-[#23205C]/5 text-[#23205C]">
+                            <Building2 className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-bold text-slate-900">{hallName}</h3>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${accent.soft}`}>
+                                Hall #{index + 1}
+                              </span>
+                              {hall.full && (
+                                <span className="rounded-full bg-[#E0222A]/10 px-2 py-0.5 text-xs font-semibold text-[#E0222A]">
+                                  Full
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              Click to manage hall details
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <div className="text-right">
+                            <div className="text-sm font-bold text-slate-900">
+                              Used {used} / {effectiveCapacity}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              Roster {rosterAssigned} assigned
+                            </div>
+                          </div>
+                          {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                        </div>
+                      </div>
+                    </button>
+
+                    <div className="px-4 pb-4">
+                      <div className="mb-3">
+                        <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+                          <span>Occupancy</span>
+                          <span>{Math.round(percentage)}%</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className={`h-full rounded-full transition-all ${colorMap[hall.color] || "bg-[#23205C]"}`}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                        {SHIFT_OPTIONS.map((shift) => {
+                          const info = hall.shiftDetails?.[shift.code] || { capacity: 0, used: 0, remaining: 0 };
+                          return (
+                            <div key={shift.code} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-center">
+                              <div className="font-semibold text-slate-700">{shift.code}</div>
+                              <div className="text-slate-500">
+                                {info.used}/{info.capacity}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {isOpen && (
+                        <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-200 pt-4 sm:grid-cols-3 xl:grid-cols-4">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Hall name
+                            </label>
+                            <input
+                              value={draft.name ?? ""}
+                              onChange={(e) => patchDraft(hall.id, { name: e.target.value })}
+                              className="w-full rounded-lg border-2 border-slate-200 bg-white px-3 py-2 outline-none transition focus:border-[#23205C]"
+                              placeholder="Hall name"
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Base capacity
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={draft.capacity ?? 0}
+                              onChange={(e) => patchDraft(hall.id, { capacity: Number(e.target.value) })}
+                              className="w-full rounded-lg border-2 border-slate-200 bg-white px-3 py-2 outline-none transition focus:border-[#23205C]"
+                              placeholder="Capacity"
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Color
+                            </label>
+                            <select
+                              value={draft.color || "blue"}
+                              onChange={(e) => patchDraft(hall.id, { color: e.target.value })}
+                              className="w-full rounded-lg border-2 border-slate-200 bg-white px-3 py-2 outline-none transition focus:border-[#23205C]"
+                              disabled={isSaving}
+                            >
+                              {Object.keys(colorMap).map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="flex items-end">
+                            <button
+                              type="button"
+                              onClick={() => saveHall(hall.id)}
+                              disabled={isSaving || !dirty}
+                              className={`flex w-full items-center justify-center gap-2 rounded-lg border-2 px-4 py-2 text-sm font-semibold transition ${
+                                isSaving || !dirty
+                                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                                  : "border-[#23205C] bg-[#23205C] text-white hover:bg-[#1a1847]"
+                              }`}
+                            >
+                              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                              {dirty || isSaving ? "Save hall" : "Saved"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+              No halls added yet.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
